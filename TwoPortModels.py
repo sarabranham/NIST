@@ -20,7 +20,7 @@ class SimpleTwoPort:
         s21 = math.sqrt(self.z0/z) * (1 + s11)
         s22 = math.fabs((z - self.z0) / (self.z0 + z))
         s12 = math.sqrt(self.z0/z) * (1 - s22)
-        return [s11, s12, s21, s22]
+        return s11, s12, s21, s22
 
     # I'm not sure if this is always true or if I will have  a voltage measurement??
     def __calc_ab(self, v1, v2, len1, len2):
@@ -31,7 +31,11 @@ class SimpleTwoPort:
         return b1/a1, b1/a2, b2/a1, b2/a2
 
     def data(self):
-        return [self.f, self.__calc_s(self.zl)]
+        a = [[self.f[i]] for i in range(len(self.f))]
+        for j in range(len(a)):
+            for i in self.__calc_s(self.zl):
+                a[j].append(i)
+        return a
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -39,7 +43,7 @@ class SimpleTwoPort:
 class CapacitorTwoPort(SimpleTwoPort):
 
     def __init__(self, capacitance, freq):
-        SimpleTwoPort.__init__(freq)
+        SimpleTwoPort.__init__(self, freq)
         self.c = capacitance
 
     def __calc_z(self):
@@ -54,7 +58,7 @@ class CapacitorTwoPort(SimpleTwoPort):
 class InductorTwoPort(SimpleTwoPort):
 
     def __init__(self, inductance, freq):
-        SimpleTwoPort.__init__(freq)
+        SimpleTwoPort.__init__(self, freq)
         self.i = inductance
 
     def __calc_z(self):
@@ -63,7 +67,10 @@ class InductorTwoPort(SimpleTwoPort):
     def data(self):
         return self.f, self.__calc_s(self.__calc_z())
 
+# -----------------------------------------------------------------------------------------------------------------------
 
-
+x = SimpleTwoPort([100, 200, 300])
+print x.f
+print x.data()
 
 
