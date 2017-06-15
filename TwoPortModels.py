@@ -41,31 +41,28 @@ class SimpleTwoPort:
 
 
 class CapacitorTwoPort(SimpleTwoPort):
+    # TODO impedance will be an array if frequency is an array - how should data be presented?
 
-    def __init__(self, capacitance, freq):
+    def __init__(self, freq, capacitance):
         SimpleTwoPort.__init__(self, freq)
         self.c = capacitance
+        self.z = 1 / (2 * math.pi * freq * capacitance)
 
-    def __calc_z(self):
-        return 1/(2*math.pi*self.f*self.c)
-
-    def data(self):
-        return self.f, self.__calc_s(self.__calc_z())
+#    def data(self):
+#        return self.f, self.__calc_s(self.__calc_z())
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 
 class InductorTwoPort(SimpleTwoPort):
 
-    def __init__(self, inductance, freq):
+    def __init__(self, freq, inductance):
         SimpleTwoPort.__init__(self, freq)
         self.i = inductance
+        self.z = 2 * math.pi * freq * inductance
 
-    def __calc_z(self):
-        return 2 * math.pi * self.f * self.i
-
-    def data(self):
-        return self.f, self.__calc_s(self.__calc_z())
+#    def data(self):
+#       return self.f, self.__calc_s(self.__calc_z())
 
 # -----------------------------------------------------------------------------------------------------------------------
 
