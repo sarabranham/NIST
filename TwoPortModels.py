@@ -15,7 +15,7 @@ class SimpleTwoPort:
     def get_freq(self):
         return self.f
 
-    def __calc_s(self, z):
+    def calc_s(self, z):
         s11 = math.fabs((self.z0 - z) / (self.z0 + z))
         s21 = math.sqrt(self.z0/z) * (1 + s11)
         s22 = math.fabs((z - self.z0) / (self.z0 + z))
@@ -33,23 +33,26 @@ class SimpleTwoPort:
     def data(self):
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
-            for i in self.__calc_s(self.zl):
-                a[j].append(i)
+            for p in self.calc_s(self.zl):
+                a[j].append(p)
         return a
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 
 class CapacitorTwoPort(SimpleTwoPort):
-    # TODO impedance will be an array if frequency is an array - how should data be presented?
 
     def __init__(self, freq, capacitance):
         SimpleTwoPort.__init__(self, freq)
         self.c = capacitance
-        self.z = 1 / (2 * math.pi * freq * capacitance)
+        self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
 
-#    def data(self):
-#        return self.f, self.__calc_s(self.__calc_z())
+    def data(self):
+        a = [[self.f[i]] for i in range(len(self.f))]
+        for j in range(len(a)):
+            for p in self.calc_s(self.z[j]):
+                a[j].append(float("{0:.5f}".format(p)))
+        return a
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -59,15 +62,28 @@ class InductorTwoPort(SimpleTwoPort):
     def __init__(self, freq, inductance):
         SimpleTwoPort.__init__(self, freq)
         self.i = inductance
-        self.z = 2 * math.pi * freq * inductance
+        self.z = [2 * math.pi * self.f[j] * self.i for j in range(len(self.f))]
 
-#    def data(self):
-#       return self.f, self.__calc_s(self.__calc_z())
+    def data(self):
+        a = [[self.f[i]] for i in range(len(self.f))]
+        for j in range(len(a)):
+            for p in self.calc_s(self.z[j]):
+                a[j].append(float("{0:.5f}".format(p)))
+        return a
+
 
 # -----------------------------------------------------------------------------------------------------------------------
+f = [100, 200, 300]
 
-x = SimpleTwoPort([100, 200, 300])
-print x.f
-print x.data()
+
+def test():
+    x = InductorTwoPort(f, 5)
+    print "Inductor: ", x.data()
+    y = CapacitorTwoPort(f, 5)
+    print "Capacitor: ", y.data()
+    z = SimpleTwoPort(f)
+    print "Simple: ", z.data()
+
+test()
 
 
