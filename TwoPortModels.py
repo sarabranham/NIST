@@ -97,6 +97,4 @@ def test():
     z = SimpleTwoPort(f, 0.001)
     print "Simple:", z.data()
 
-test()
-
 
