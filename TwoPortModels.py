@@ -21,6 +21,7 @@ except:
 
 # Know: frequency and device (short, open, load)
 # other parameters change by device (length and waveguide)
+# when call w/ list of freqs
 
 
 class SimpleTwoPort(object):
@@ -28,6 +29,7 @@ class SimpleTwoPort(object):
     zg = 0.
 
     def __init__(self, freq, r):
+        # set default r if no r
         self.f = freq
         self.zl = r
 
@@ -94,7 +96,7 @@ class ShortTwoPort(SimpleTwoPort):
 f = [4e11, 35e11, 3e13]
 
 
-def test():
+def test_two_port_model():
     # Expect: vals for s11, s22; others = 0
     # Get: s11 = 1, s12 = 0, s21 = 0, s22 = 1
     x = ShortTwoPort(f, 50, .000910)

@@ -9,8 +9,16 @@ from ipywidgets import *
 
 
 def graph_s(circuit_type):
+    if not (type(circuit_type) == basestring):
+        raise TypeError('circuit type must be a string')
+
     f = np.linspace(4e11, 3e13, 500)
-    z = tpm.OpenTwoPort(f, 0.001, .000047)
+    if circuit_type == 'Open' or circuit_type == 'open':
+        z = tpm.OpenTwoPort(f, 0.001, .000047)
+    elif circuit_type == 'Short' or circuit_type == 'short':
+        z = tpm.ShortTwoPort(f, 0.001, .000910)
+    else:
+        z = tpm.SimpleTwoPort(f, 5)
     count = 0
     s_data = [[], [], [], []]
     for list1 in z.data():
@@ -34,9 +42,9 @@ def graph_s(circuit_type):
     plt.legend(loc=4)
     plt.show()
 
-graph_s('Open')
+graph_s('Simple')
 
 
-# attenuator (2 port load) all small (nonzero) s21 = -40 dB (base 10 log)
-# thru = 0 len waveguide - s21 = s12 = 1 phase matters
+# attenuator/2 port load = all small (nonzero) s21 = -40 dB (log10(pow2/pow1))
+# thru = 0 len waveguide, s21 = s12 = 1 phase matters
 # waveguide = phase, otherwise acknowledge loss (about 1)
