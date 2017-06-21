@@ -10,8 +10,13 @@
 try:
     import math
 except:
-    print("The module numpy either was not found"
+    print("The module math either was not found"
           "Please put it on the python path")
+    raise
+try:
+    import numpy as np
+except:
+    print("The module numpy either was not found or has an error")
     raise
 
 # Know: frequency and device (short, open, load)
@@ -31,7 +36,7 @@ class SimpleTwoPort(object):
 
     def calc_s(self, z):
         s11 = math.fabs((self.z0 - z) / (self.z0 + z))
-        s21 = math.sqrt(self.z0/z) * (1 + s11)
+        s21 = math.sqrt(self.z0/z) * (1 - s11)
         s22 = math.fabs((z - self.z0) / (self.z0 + z))
         s12 = math.sqrt(self.z0/z) * (1 - s22)
         return s11, s12, s21, s22
@@ -48,13 +53,13 @@ class SimpleTwoPort(object):
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
             for p in self.calc_s(self.zl):
-                a[j].append(p)
+                a[j].append(float("{0:.8f}".format(p)))
         return a
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-class CapacitorTwoPort(SimpleTwoPort):
+class OpenTwoPort(SimpleTwoPort):
 
     def __init__(self, freq, r, capacitance):
         SimpleTwoPort.__init__(self, freq, r)
@@ -65,13 +70,13 @@ class CapacitorTwoPort(SimpleTwoPort):
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
             for p in self.calc_s(self.z[j]):
-                a[j].append(float("{0:.5f}".format(p)))
+                a[j].append(float("{0:.8f}".format(p)))
         return a
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-class InductorTwoPort(SimpleTwoPort):
+class ShortTwoPort(SimpleTwoPort):
 
     def __init__(self, freq, r, inductance):
         SimpleTwoPort.__init__(self, freq, r)
@@ -90,11 +95,16 @@ f = [4e11, 35e11, 3e13]
 
 
 def test():
-    x = InductorTwoPort(f, 50, .000910)
-    print "Inductor:", x.data()
-    y = CapacitorTwoPort(f, 50, .000047)
-    print "Capacitor:", y.data()
-    z = SimpleTwoPort(f, 0.001)
-    print "Simple:", z.data()
+    # Expect: vals for s11, s22; others = 0
+    # Get: s11 = 1, s12 = 0, s21 = 0, s22 = 1
+    x = ShortTwoPort(f, 50, .000910)
+    y = OpenTwoPort(f, 50, .000047)
 
+    # Expect: all small values???
+    # Get: s11 = 1, s12 = 0.009, s21 = 0.009, s22 = 1
+    z = SimpleTwoPort(f, 0.001)
+
+    print x.data()
+    print y.data()
+    print z.data()
 
