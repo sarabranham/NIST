@@ -162,6 +162,7 @@ class ShortTwoPort(SimpleTwoPort):
 # Testing Scripts
 
 
+# Converts 2D array into latex (not currently being used)
 def bmatrix(a):
     if len(a.shape) > 2:
         raise ValueError('bmatrix can at most display two dimensions')
@@ -178,11 +179,9 @@ def test_two_port_model():
     f = np.linspace(3e8, 5e10, 300)
     x = ShortTwoPort(frequency=f, resistance=18, inductance=.000910)
     y = OpenTwoPort(frequency=f, resistance=18, capacitance=.000047)
-
     # Expect: all small values???
     # Get: s11 = 1, s12 = 0.09, s21 = 0.09, s22 = 1
     z = SimpleTwoPort(frequency=f, resistance=18)
-
     print x.data()
     print y.data()
     print z.data()
@@ -196,10 +195,13 @@ def graph_s(circuit_type):
     f = np.linspace(3e8, 5e10, 500)
     if circuit_type == 'Open' or circuit_type == 'open':
         z = OpenTwoPort(frequency=f, resistance=50, capacitance=.000047)
+        r = 50
     elif circuit_type == 'Short' or circuit_type == 'short':
         z = ShortTwoPort(frequency=f, resistance=50, inductance=.000910)
+        r = 50
     else:
         z = SimpleTwoPort(frequency=f, resistance=0.1)
+        r = 0.1
     count = 0
     s_data = [[], [], [], []]
     for list1 in z.data():
@@ -222,12 +224,22 @@ def graph_s(circuit_type):
             count += 1
 
     # TODO fix this title because it's not happening
-    # plt.title(circuit_type + ' S Parameters')
-    plt.rc('text', usetex=True)
-    # plt.title("${0}$".format(sympy.latex(np.matrix(get_s_param_eqns(eqns)))))
-    plt.title(r"$sum_{n=1}^\infty\frac{-e^{i\pi}}{2^n}$!", fontsize=16, color='gray')
-    # plt.title(bmatrix(get_s_param_eqns(eqns)))
-    plt.subplots_adjust(top=0.8)
+    sympy.init_printing()
+    sympy.pprint(sympy.Matrix(get_s_param_eqns(eqns)), use_unicode=False)
+    print ' '
+    sympy.pprint(sympy.Matrix(get_s_param_eqns(eqns)), use_unicode=False)
+    # s11 = str(get_s_param_eqns(eqns)[0][0])
+    # s12 = str(get_s_param_eqns(eqns)[0][1])
+    # s21 = str(get_s_param_eqns(eqns)[1][0])
+    # s22 = str(get_s_param_eqns(eqns)[1][1])
+    # plt.rcParams['text.usetex'] = True
+    # plt.title(sympy.latex(sympy.Matrix(get_s_param_eqns(eqns))), fontsize=16, y=1)
+    # plt.title(r"$sum_{n=1}^\infty\frac{-e^{i\pi}}{2^n}$!", fontsize=16, color='gray')
+    # plt.title(r'$\{array} (-z + z0)/(z + z0) & sqrt(z0/z)*(-s + 1) \\ sqrt(z0/z)*(-s + 1) & (-z + z0)/(z + z0) \end {array}$')
+    # plt.title(r'$\begin{array}{cc} s11 & s12 \\ s21 & s22 \end{array}$')
+    # plt.title(r'Eqn: $\left[ {begin{array}{cc}'
+    #          r's11 & s12 \\ s21 & s22 \\ \end{array} } \right]$', fontsize=16, color='r', y=1.08)
+    plt.title(circuit_type + ' S Parameters')
     plt.legend()
     plt.show()
 
