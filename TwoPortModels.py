@@ -67,14 +67,9 @@ class SimpleTwoPort(object):
         if self.options["length"]:
             self.len = self.options["length"]
 
-    def get_freq(self):
-        return self.f
-
     def calc_s(self, z):
-        # s11 = math.fabs((self.z0 - z) / (self.z0 + z))
         s11 = (self.z0 - z) / (self.z0 + z)
         s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
-        # s22 = math.fabs((z - self.z0) / (self.z0 + z))
         s22 = (z - self.z0) / (self.z0 + z)
         s12 = math.sqrt(self.z0/z) * (1 - math.fabs(s22))
         return s11, s12, s21, s22
@@ -101,8 +96,10 @@ class OpenTwoPort(SimpleTwoPort):
 
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
-                    "capacitance": None,
-                    "impedance": None}
+                    "capacitance": 0.000047,
+                    "impedance": None,
+                    "complex": False,
+                    "c1, c2, c3": None}
         self.options = {}
         for key, value in defaults.iteritems():
             self.options[key] = value
@@ -110,14 +107,32 @@ class OpenTwoPort(SimpleTwoPort):
             self.options[key] = value
         # test if any vars in superclass
         SimpleTwoPort.__init__(self, **self.options)
+        if 'complex' in self.options:
+            self.complex = self.options['complex']
+        if self.complex:
+            if self.options["impedance"]:
+                self.z = self.options["impedance"]
+            else:
+                self.z = [2*math.pi*sympy.I*(c0 + c1*i + c2*i**2)*i for i in self.f]
+        else:
+            if self.options["impedance"]:
+                self.z = self.options["impedance"]
+            else:
+
+                self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
         if self.options["capacitance"]:
             self.c = self.options["capacitance"]
         else:
             self.c = .000047
-        if self.options["impedance"]:
-            self.z = self.options["impedance"]
-        else:
-            self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
+
+    def complex_calc_s(self, c0, c1, c2):
+        zc = [2*math.pi*sympy.I*(c0 + c1*i + c2*i**2)*i for i in self.f]
+        print zc
+        quit()
+        s11 = (self.z0 - zc) / (self.z0 + zc)
+        s21 = math.sqrt(self.z0/zc) * (1 - math.fabs(s11))
+        s22 = (zc - self.z0) / (self.z0 + zc)
+        s12 = math.sqrt(self.z0/zc) * (1 - math.fabs(s22))
 
     def data(self):
         a = [[self.f[i]] for i in range(len(self.f))]
@@ -151,6 +166,17 @@ class ShortTwoPort(SimpleTwoPort):
         else:
             self.z = [2 * math.pi * self.f[j] * self.i for j in range(len(self.f))]
 
+    def complex_calc_s(self, l0, l1, l2):
+        zl = [2 * math.pi * sympy.I * (l0 + l1 * i + l2 * i ** 2) * i for i in self.f]
+        s = []
+        for i in range(len(zl)):
+            s11 = (self.z0 - zl[i]) / (self.z0 + zl[i])
+            s21 = math.sqrt(self.z0/zl[i]) * (1 - math.fabs(s11))
+            s22 = (zl[i] - self.z0) / (self.z0 + zl[i])
+            s12 = math.sqrt(self.z0/zl[i]) * (1 - math.fabs(s22))
+            s.append(s11, s12, s21, s22)
+        return s
+
     def data(self):
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
@@ -162,26 +188,15 @@ class ShortTwoPort(SimpleTwoPort):
 # Testing Scripts
 
 
-# Converts 2D array into latex (not currently being used)
-def bmatrix(a):
-    if len(a.shape) > 2:
-        raise ValueError('bmatrix can at most display two dimensions')
-    lines = str(a).replace('[', '').replace(']', '').splitlines()
-    rv = [r'\begin{bmatrix}']
-    rv += ['  ' + ' & '.join(l.split()) + r'\\' for l in lines]
-    rv += [r'\end{bmatrix}']
-    return '\n'.join(rv)
-
-
 def test_two_port_model():
     # Expect: vals for s11, s22; others = 0
     # Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
-    f = np.linspace(1e8, 5e10, 300)
-    x = ShortTwoPort(frequency=f, resistance=18, inductance=.000910)
-    y = OpenTwoPort(frequency=f, resistance=18, capacitance=.000047)
+    freq = np.linspace(1e8, 5e10, 5)
+    x = ShortTwoPort(frequency=freq, resistance=18, inductance=.000910)
+    y = OpenTwoPort(frequency=freq, resistance=18, capacitance=.000047)
     # Expect: all small values???
     # Get: s11 = 1, s12 = 0.09, s21 = 0.09, s22 = 1
-    z = SimpleTwoPort(frequency=f, resistance=18)
+    z = SimpleTwoPort(frequency=freq, resistance=18)
     print x.data()
     print y.data()
     print z.data()
@@ -195,9 +210,6 @@ def graph_s(circuit_type):
     freq = np.linspace(3e8, 5e10, 500)
     if circuit_type == 'Open' or circuit_type == 'open':
         z = OpenTwoPort(frequency=freq, resistance=50, capacitance=.000047)
-        # p_refl = sympy.lambdify((f, c, zeta), (2*math.pi*f*c*zeta - 1) / (2*math.pi*f*c*zeta + 1), 'math')
-        # subs can only replace one thing, and if it replaces all things it simplifies and gives you answer (1)
-        expr = (2*math.pi*F*C*R - 1) / (2*math.pi*F*C*R + 1)
         p_refl = sympy.lambdify((f, c, zeta), expr.subs((F, C, R), (f, c, zeta)))
         p_trans = sympy.lambdify((f, c, zeta, s), (2*math.pi*f*c*zeta)**(1/2)*(1-s), 'math')
 
@@ -258,4 +270,8 @@ def graph_s(circuit_type):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # test_two_port_model()
-graph_s('open')
+# graph_s('open')
+
+
+s = ShortTwoPort(frequency=np.linspace(1e8, 5e10, 5), resistance=50, inductance=.000910)
+s.complex_calc_s(2, 3, 4)
