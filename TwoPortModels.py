@@ -40,7 +40,7 @@ except:
 # when call w/ list of freqs
 
 
-class SimpleTwoPort(object):
+class TwoPortModel(object):
 
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
@@ -89,10 +89,32 @@ class SimpleTwoPort(object):
                 a[j].append(float("{0:.8f}".format(p)))
         return a
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+class ReciprocalModel(TwoPortModel):
+    def __init__(self, **kwargs):
+        defaults = {"frequency": None,
+                    "impedance": None,
+                    "complex": False}
+        self.options = {}
+        for key, value in defaults.iteritems():
+            self.options[key] = value
+        for key, value in kwargs.iteritems():
+            self.options[key] = value
+        TwoPortModel.init(self, **self.options)
+
+    def calc_s(self, z):
+        s11 = (self.z0 - z) / (self.z0 + z)
+        s22 = math.sqrt(1 - s11**2)
+        s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
+        s12 = s21
+        return s11, s12, s21, s22
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-class OpenTwoPort(SimpleTwoPort):
+class SimpleOpenModel(TwoPortModel):
 
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
@@ -106,7 +128,7 @@ class OpenTwoPort(SimpleTwoPort):
         for key, value in kwargs.iteritems():
             self.options[key] = value
         # test if any vars in superclass
-        SimpleTwoPort.__init__(self, **self.options)
+        TwoPortModel.__init__(self, **self.options)
         if 'complex' in self.options:
             self.complex = self.options['complex']
         if self.complex:
@@ -144,7 +166,7 @@ class OpenTwoPort(SimpleTwoPort):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-class ShortTwoPort(SimpleTwoPort):
+class SimpleShortModel(TwoPortModel):
 
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
@@ -156,7 +178,7 @@ class ShortTwoPort(SimpleTwoPort):
         for key, value in kwargs.iteritems():
             self.options[key] = value
         # test if any vars in superclass
-        SimpleTwoPort.__init__(self, **self.options)
+        TwoPortModel.__init__(self, **self.options)
         if self.options["inductance"]:
             self.i = self.options["inductance"]
         else:
@@ -192,11 +214,11 @@ def test_two_port_model():
     # Expect: vals for s11, s22; others = 0
     # Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
     freq = np.linspace(1e8, 5e10, 5)
-    x = ShortTwoPort(frequency=freq, resistance=18, inductance=.000910)
-    y = OpenTwoPort(frequency=freq, resistance=18, capacitance=.000047)
+    x = SimpleShortModel(frequency=freq, resistance=18, inductance=.000910)
+    y = SimpleOpenModel(frequency=freq, resistance=18, capacitance=.000047)
     # Expect: all small values???
     # Get: s11 = 1, s12 = 0.09, s21 = 0.09, s22 = 1
-    z = SimpleTwoPort(frequency=freq, resistance=18)
+    z = TwoPortModel(frequency=freq, resistance=18)
     print x.data()
     print y.data()
     print z.data()
@@ -209,17 +231,17 @@ def get_s_param_eqns(eqn):
 def graph_s(circuit_type):
     freq = np.linspace(3e8, 5e10, 500)
     if circuit_type == 'Open' or circuit_type == 'open':
-        z = OpenTwoPort(frequency=freq, resistance=50, capacitance=.000047)
+        z = SimpleOpenModel(frequency=freq, resistance=50, capacitance=.000047)
         p_refl = sympy.lambdify((f, c, zeta), expr.subs((F, C, R), (f, c, zeta)))
         p_trans = sympy.lambdify((f, c, zeta, s), (2*math.pi*f*c*zeta)**(1/2)*(1-s), 'math')
 
     elif circuit_type == 'Short' or circuit_type == 'short':
-        z = ShortTwoPort(frequency=freq, resistance=50, inductance=.000910)
+        z = SimpleShortModel(frequency=freq, resistance=50, inductance=.000910)
         p_refl = sympy.lambdify((f, l, zeta), (zeta - 2*math.pi*f*l) / (zeta + 2*math.pi*f*l), 'math')
         p_trans = sympy.lambdify((f, l, zeta, s), (math.sqrt(zeta / (2*math.pi*f*l)) * (1 - s)), 'math')
 
     else:
-        z = SimpleTwoPort(frequency=freq, resistance=0.1)
+        z = TwoPortModel(frequency=freq, resistance=0.1)
         p_refl = sympy.lambdify((zeta, Z), (zeta - Z) / (zeta + Z))
         p_trans = sympy.lambdify((zeta, Z, s), (zeta / Z) ** (1 / 2) * (1 - s))
 
@@ -273,5 +295,5 @@ def graph_s(circuit_type):
 # graph_s('open')
 
 
-s = ShortTwoPort(frequency=np.linspace(1e8, 5e10, 5), resistance=50, inductance=.000910)
+s = SimpleShortModel(frequency=np.linspace(1e8, 5e10, 5), resistance=50, inductance=.000910)
 s.complex_calc_s(2, 3, 4)
