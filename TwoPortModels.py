@@ -24,7 +24,7 @@ except:
     raise
 try:
     import sympy as sympy
-    from sympy.abc import f, F, c, C, zeta, l, s, Z, R
+    from sympy.abc import f, F, c, C, zeta, l, S, Z, R
 except:
     print("The module sympy either wa snot found or has an error")
     raise
@@ -66,9 +66,18 @@ class TwoPortModel(object):
             self.z0 = 50.
         if self.options["length"]:
             self.len = self.options["length"]
+        self.eqn = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)*(1 - abs(S))],
+                                          [(zeta - Z)/(Z + zeta), sympy.sqrt(Z/zeta)*(1 - abs(S))]]))
+
+        # define eqns? - not sure if it should be an instance var?
 
     def set_freq(self, freq):
         self.f = freq
+
+    def get_eqns(self):
+        # self.eqn MUST BE sympy matrix or another sympy format
+        sympy.init_printing()
+        sympy.pprint(self.eqn, use_unicode=False)
 
     def calc_s(self, z):
         s11 = (self.z0 - z) / (self.z0 + z)
@@ -161,6 +170,16 @@ class OpenModel(TwoPortModel):
                     print "There is an error in your complex parameter input, default c0=c1=c2=1"
                     print "This can be changed with set_complex_coefs"
 
+    def get_eqns(self):
+        if self.simple:
+            TwoPortModel.get_eqns(self)
+        else:
+            c0, c1, c2 = sympy.symbols('c0 c1 c2')
+            z_c = 1/(2*sympy.pi*sympy.I*(c0 + c1*f + c2*f**2)*f)
+            for i in range(len(self.eqn)):
+                self.eqn[i] = self.eqn[i].subs(zeta, z_c).simplify()
+            TwoPortModel.get_eqns(self)
+
     def set_complex_coefs(self, c0, c1, c2):
         self.c0 = c0
         self.c1 = c1
@@ -238,6 +257,16 @@ class ShortModel(TwoPortModel):
                     print "There is an error in your complex parameter input, default l0=l1=l2=1"
                     print "This can be changed with set_complex_coefs"
 
+    def get_eqns(self):
+        if self.simple:
+            TwoPortModel.get_eqns(self)
+        else:
+            l0, l1, l2 = sympy.symbols('l0 l1 l2')
+            z_l = 1/(2*sympy.pi*sympy.I*(l0 + l1*f + l2*f**2)*f)
+            for i in range(len(self.eqn)):
+                self.eqn[i] = self.eqn[i].subs(zeta, z_l).simplify()
+            TwoPortModel.get_eqns(self)
+
     def set_complex_coefs(self, l0, l1, l2):
         self.l0 = l0
         self.l1 = l1
@@ -265,15 +294,15 @@ class ShortModel(TwoPortModel):
 def test_two_port_model():
     # Expect: vals for s11, s22; others = 0
     # Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
-    freq = np.linspace(1e8, 5e10, 5)
-    x = ShortModel(frequency=freq, resistance=18, inductance=.000910)
-    y = OpenModel(frequency=freq, resistance=18, capacitance=.000047)
+    open_complex = OpenModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=False)
+    open_simple = OpenModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=True)
+    # y = OpenModel(frequency=freq, resistance=18, capacitance=.000047)
     # Expect: all small values???
     # Get: s11 = 1, s12 = 0.09, s21 = 0.09, s22 = 1
-    z = TwoPortModel(frequency=freq, resistance=18)
-    print x.data()
-    print y.data()
-    print z.data()
+    # z = TwoPortModel(frequency=freq, resistance=18)
+    print open_complex.z
+    print open_complex.data()
+    open_complex.get_eqns()
 
 
 def get_s_param_eqns(eqn):
@@ -284,18 +313,18 @@ def graph_s(circuit_type):
     freq = np.linspace(3e8, 5e10, 500)
     if circuit_type == 'Open' or circuit_type == 'open':
         z = OpenModel(frequency=freq, resistance=50, capacitance=.000047)
-        p_refl = sympy.lambdify((f, c, zeta), expr.subs((F, C, R), (f, c, zeta)))
-        p_trans = sympy.lambdify((f, c, zeta, s), (2*math.pi*f*c*zeta)**(1/2)*(1-s), 'math')
+        # p_refl = sympy.lambdify((f, c, zeta), expr.subs((F, C, R), (f, c, zeta)))
+        p_trans = sympy.lambdify((f, c, zeta, S), (2*math.pi*f*c*zeta)**(1/2)*(1-S), 'math')
 
     elif circuit_type == 'Short' or circuit_type == 'short':
         z = ShortModel(frequency=freq, resistance=50, inductance=.000910)
         p_refl = sympy.lambdify((f, l, zeta), (zeta - 2*math.pi*f*l) / (zeta + 2*math.pi*f*l), 'math')
-        p_trans = sympy.lambdify((f, l, zeta, s), (math.sqrt(zeta / (2*math.pi*f*l)) * (1 - s)), 'math')
+        p_trans = sympy.lambdify((f, l, zeta, S), (math.sqrt(zeta / (2*math.pi*f*l)) * (1 - S)), 'math')
 
     else:
         z = TwoPortModel(frequency=freq, resistance=0.1)
         p_refl = sympy.lambdify((zeta, Z), (zeta - Z) / (zeta + Z))
-        p_trans = sympy.lambdify((zeta, Z, s), (zeta / Z) ** (1 / 2) * (1 - s))
+        p_trans = sympy.lambdify((zeta, Z, S), (zeta / Z) ** (1 / 2) * (1 - S))
 
     count = 0
     s_data = [[], [], [], []]
@@ -343,17 +372,7 @@ def graph_s(circuit_type):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-# test_two_port_model()
+test_two_port_model()
 # graph_s('open')
-
-s = ShortModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=False)
-print s.z
-print s.data()
-
-print
-
-x = ShortModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=True)
-print x.z
-print x.data()
 
 
