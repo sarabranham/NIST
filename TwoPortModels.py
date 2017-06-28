@@ -55,7 +55,7 @@ class TwoPortModel(object):
         if 'frequency' in self.options:
             self.f = self.options["frequency"]
         else:
-            self.f = [3e8, 4e9, 5e10]
+            self.f = np.linspace(1e8, 1.8e10, 3)
         if self.options["resistance"]:
             self.z = self.options["resistance"]
         else:
@@ -91,13 +91,13 @@ class ReciprocalModel(TwoPortModel):
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
                     "impedance": None,
-                    "complex": False}
+                    "complex": None}
         self.options = {}
         for key, value in defaults.iteritems():
             self.options[key] = value
         for key, value in kwargs.iteritems():
             self.options[key] = value
-        TwoPortModel.init(self, **self.options)
+        TwoPortModel.__init__(self, **self.options)
 
     def calc_s(self, z):
         s11 = (self.z0 - z) / (self.z0 + z)
@@ -124,12 +124,15 @@ class OpenModel(TwoPortModel):
             self.options[key] = value
         TwoPortModel.__init__(self, **self.options)
 
+        # set c
+        if self.options["capacitance"]:
+            self.c = self.options["capacitance"]
+        else:
+            self.c = .000047
+
         # deal with complex
-        if self.options["simple"]:
-            if isinstance(self.options['simple'], bool):
-                self.simple = self.options['simple']
-            else:
-                raise TypeError("keyword 'simple' must be of type boolean")
+        if 'simple' in self.options:
+            self.simple = self.options['simple']
         else:
             self.simple = True
 
@@ -147,38 +150,37 @@ class OpenModel(TwoPortModel):
                     self.c0 = self.options['c0']
                     self.c1 = self.options['c1']
                     self.c2 = self.options['c2']
-                    self.z = [2*math.pi*sympy.I*(self.c0 + self.c1*self.f[i] + self.c2*self.f[i]**2)*self.f[i] for i
-                        in range(len(self.f))]
-                except:
-                    print "There is an error in your complex parameter input"
-                    raise
-
-        if self.options["capacitance"]:
-            self.c = self.options["capacitance"]
-        else:
-            self.c = .000047
+                    self.z = [1 / (2*math.pi*sympy.I * (self.c0 + self.c1*self.f[i] + self.c2*self.f[i]**2) * self.f[i])
+                              for i in range(len(self.f))]
+                except KeyError:
+                    self.c0 = 1
+                    self.c1 = 1
+                    self.c2 = 1
+                    self.z = [1 / (2*math.pi*sympy.I * (self.c0 + self.c1*self.f[i] + self.c2*self.f[i]**2) * self.f[i])
+                              for i in range(len(self.f))]
+                    print "There is an error in your complex parameter input, default c0=c1=c2=1"
+                    print "This can be changed with set_complex_coefs"
 
     def set_complex_coefs(self, c0, c1, c2):
         self.c0 = c0
         self.c1 = c1
         self.c2 = c2
-        self.z = [2 * math.pi * sympy.I * (self.c0 + self.c1 * self.f[i] + self.c2 * self.f[i] ** 2) * self.f[i] for i
+        self.z = [1 / (2*math.pi*sympy.I * (self.c0 + self.c1*self.f[i] + self.c2*self.f[i]**2) * self.f[i]) for i
                   in range(len(self.f))]
 
-    # s params will be arrays
-    def complex_calc_s(self, z):
-        s11 = (self.z0 - z) / (self.z0 + z)
-        s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
-        s22 = (z - self.z0) / (self.z0 + z)
-        s12 = math.sqrt(self.z0/z) * (1 - math.fabs(s22))
-        return s11, s12, s21, s22
+    def complex_calc_s(self):
+        return 'complex'
 
     def data(self):
         a = [[self.f[i]] for i in range(len(self.f))]
-        for j in range(len(a)):
-            for p in self.calc_s(self.z[j]):
-                a[j].append(float("{0:.8f}".format(p)))
-        return a
+        if self.simple:
+            for j in range(len(a)):
+                for p in self.calc_s(self.z[j]):
+                    a[j].append(float("{0:.8f}".format(p)))
+            return a
+        else:
+            return self.complex_calc_s()
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -188,7 +190,9 @@ class ShortModel(TwoPortModel):
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
                     "inductance": None,
-                    "impedance": None}
+                    "impedance": None,
+                    "simple": None,
+                    "l1, l2, l3": None}
         self.options = {}
         for key, value in defaults.iteritems():
             self.options[key] = value
@@ -196,32 +200,63 @@ class ShortModel(TwoPortModel):
             self.options[key] = value
         # test if any vars in superclass
         TwoPortModel.__init__(self, **self.options)
+
+        # set inductance
         if self.options["inductance"]:
             self.i = self.options["inductance"]
         else:
             self.i = .000910
-        if self.options["impedance"]:
-            self.z = self.options["impedance"]
-        else:
-            self.z = [2 * math.pi * self.f[j] * self.i for j in range(len(self.f))]
 
-    def complex_calc_s(self, l0, l1, l2):
-        zl = [2 * math.pi * sympy.I * (l0 + l1 * i + l2 * i ** 2) * i for i in self.f]
-        s = []
-        for i in range(len(zl)):
-            s11 = (self.z0 - zl[i]) / (self.z0 + zl[i])
-            s21 = math.sqrt(self.z0/zl[i]) * (1 - math.fabs(s11))
-            s22 = (zl[i] - self.z0) / (self.z0 + zl[i])
-            s12 = math.sqrt(self.z0/zl[i]) * (1 - math.fabs(s22))
-            s.append(s11, s12, s21, s22)
-        return s
+        # deal with complex
+        if 'simple' in self.options:
+            self.simple = self.options['simple']
+        else:
+            self.simple = True
+
+        # set z according to complex/simple
+        if self.simple:
+            if self.options["impedance"]:
+                self.z = self.options["impedance"]
+            else:
+                self.z = [2 * math.pi * self.f[j] * self.i for j in range(len(self.f))]
+        else:
+            if self.options["impedance"]:
+                self.z = self.options["impedance"]
+            else:
+                try:
+                    self.l0 = self.options['l0']
+                    self.l1 = self.options['l1']
+                    self.l2 = self.options['l2']
+                    self.z = [2*math.pi*sympy.I * (self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2) * self.f[i] for
+                              i in range(len(self.f))]
+                except KeyError:
+                    self.l0 = 1
+                    self.l1 = 1
+                    self.l2 = 1
+                    self.z = [2*math.pi*sympy.I * (self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2) * self.f[i] for
+                              i in range(len(self.f))]
+                    print "There is an error in your complex parameter input, default l0=l1=l2=1"
+                    print "This can be changed with set_complex_coefs"
+
+    def set_complex_coefs(self, l0, l1, l2):
+        self.l0 = l0
+        self.l1 = l1
+        self.l2 = l2
+        self.z = [2*math.pi*sympy.I * (self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2) * self.f[i] for i
+                  in range(len(self.f))]
+
+    def complex_calc_s(self):
+        return 's params are complex'
 
     def data(self):
         a = [[self.f[i]] for i in range(len(self.f))]
-        for j in range(len(a)):
-            for p in self.calc_s(self.z[j]):
-                a[j].append(float("{0:.8f}".format(p)))
-        return a
+        if self.simple:
+            for j in range(len(a)):
+                for p in self.calc_s(self.z[j]):
+                    a[j].append(float("{0:.8f}".format(p)))
+            return a
+        else:
+            return self.complex_calc_s()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Testing Scripts
@@ -311,6 +346,14 @@ def graph_s(circuit_type):
 # test_two_port_model()
 # graph_s('open')
 
+s = ShortModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=False)
+print s.z
+print s.data()
 
-s = ShortModel(frequency=np.linspace(1e8, 5e10, 5), resistance=50, inductance=.000910)
-s.complex_calc_s(2, 3, 4)
+print
+
+x = ShortModel(frequency=np.linspace(1e8, 1.8e10, 3), resistance=50, inductance=.000910, simple=True)
+print x.z
+print x.data()
+
+
