@@ -24,7 +24,7 @@ except:
     raise
 try:
     import sympy as sympy
-    from sympy.abc import f, F, c, C, zeta, l, S, Z
+    from sympy.abc import f, F, c, C, zeta, l, s, Z
 except:
     print("The module sympy either was not found or has an error")
     raise
@@ -76,19 +76,18 @@ class TwoPortModel(object):
         if self.options["length"]:
             self.len = self.options["length"]
 
-        zeta, Z = sympy.symbols('zeta Z')
-        self.eqn = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)],
-                                          [sympy.sqrt(Z/zeta)*(1 - abs(S)), (zeta - Z)/(Z + zeta)]]))
-
-        # define eqns? - not sure if it should be an instance var?
+        self.equation_list = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)*(1-abs(s))],
+                                                    [sympy.sqrt(Z/zeta)*(1 - abs(s)), (zeta - Z)/(Z + zeta)]]))
+        for i in range(len(self.equation_list)):
+            self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_freq(self, freq):
         self.f = freq
 
     def get_eqns(self):
-        # self.eqn MUST BE sympy matrix or another sympy format
+        # self.equation_list MUST BE sympy matrix or another sympy format
         sympy.init_printing()
-        sympy.pprint(self.eqn, use_unicode=False)
+        sympy.pprint(self.equation_list, use_unicode=False)
 
     def calc_s(self, z):
         s11 = (self.z0 - z) / (self.z0 + z)
@@ -133,8 +132,10 @@ class ReciprocalModel(TwoPortModel):
             self.options[key] = value
         TwoPortModel.__init__(self, **self.options)
         self.complex = False
-        self.eqn = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)*(1 - abs(S))],
-                                          [sympy.sqrt(Z/zeta)*(1 - abs(S)), sympy.sqrt(1-S**2)]]))
+        self.equation_list = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)*(1 - abs(s))],
+                                                    [sympy.sqrt(Z/zeta)*(1 - abs(s)), sympy.sqrt(1-s**2)]]))
+        for i in range(len(self.equation_list)):
+            self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def calc_s(self, z):
         s11 = (self.z0 - z) / (self.z0 + z)
@@ -161,7 +162,6 @@ class OpenModel(TwoPortModel):
             self.options[key] = value
 
         TwoPortModel.__init__(self, **self.options)
-
         # set c
         if self.options["capacitance"]:
             self.c = self.options["capacitance"]
@@ -174,10 +174,10 @@ class OpenModel(TwoPortModel):
         else:
             self.complex = False
 
-        # set z according to complex/complex
+        # set z
+        f = sympy.symbols('f')
+        z_c = 1 / (2 * sympy.pi * f * c)
         if not self.complex:
-            f, c = sympy.symbols('f c')
-            z_c = 1 / (2*sympy.pi*f*c)
             if self.options["impedance"]:
                 self.z = self.options["impedance"]
             else:
@@ -200,10 +200,10 @@ class OpenModel(TwoPortModel):
                     self.c2 = 1E-12
                     self.z = [complex(1/(2 * math.pi * (self.c0 + self.c1 * self.f[i] + self.c2 * self.f[i] ** 2)), 1)
                               for i in range(len(self.f))]
-
                     print "Default parameter input c0=c1=c2=" + str(self.c0)
-        for i in range(len(self.eqn)):
-            self.eqn[i] = self.eqn[i].subs(zeta, z_c)
+        for i in range(len(self.equation_list)):
+            self.equation_list[i] = self.equation_list[i].subs(zeta, z_c)
+            self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_complex_coefs(self, c0, c1, c2):
         self.c0 = c0
@@ -265,9 +265,9 @@ class ShortModel(TwoPortModel):
             self.complex = False
 
         # set z according to complex/complex
+        l = sympy.symbols('l')
+        z_l = 2 * sympy.pi * f * l
         if not self.complex:
-            l = sympy.symbols('l')
-            z_l = 2*sympy.pi*f*l
             if self.options["impedance"]:
                 self.z = self.options["impedance"]
             else:
@@ -291,8 +291,10 @@ class ShortModel(TwoPortModel):
                     self.z = [complex(2*math.pi*(self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2), 1) for
                               i in range(len(self.f))]
                     print "Default parameter input l0=l1=l2=" + str(self.l0)
-        for i in range(len(self.eqn)):
-            self.eqn[i] = self.eqn[i].subs(zeta, z_l).simplify()
+        for i in range(len(self.equation_list)):
+            self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
+            self.equation_list[i] = self.equation_list[i].subs(zeta, z_l).simplify()
+            self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_complex_coefs(self, l0, l1, l2):
         self.l0 = l0
@@ -346,43 +348,59 @@ def plot_params(model_type, **kwargs):
         plot_options[key] = value
 
     # Create Models
-    s11 = FunctionalModel(parameters='Z', variables='f', equation=model_type.eqn[0])
-    s12 = FunctionalModel(parameters='Z', variables='f', equation=model_type.eqn[1])
-    s21 = FunctionalModel(parameters='Z', variables='f', equation=model_type.eqn[2])
-    s22 = FunctionalModel(parameters='Z', variables='f', equation=model_type.eqn[3])
+    s11 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[0])
+    s22 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[3])
+
+    # TODO - figure out why this has a complex infinity error
+    s12 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[1])
+    s21 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[2])
 
     # Complex Plots
     if model_type.complex:
         if type(model_type) == OpenModel:
-            s11.parameters = ('Z', 'c0', 'c1', 'c2'); s22.parameters = ('Z', 'c0', 'c1', 'c2')
-            s12.parameters = ('Z', 'c0', 'c1', 'c2', 'S'); s21.parameters = ('Z', 'c0', 'c1', 'c2', 'S')
+            s11.set_parameters(parameters=['c0', 'c1', 'c2'])
+            s22.set_parameters(parameters=['c0', 'c1', 'c2'])
+            s12.set_parameters(parameters=['c0', 'c1', 'c2'])
+            s21.set_parameters(parameters=['c0', 'c1', 'c2'])
         else:
-            s11.parameters = ('Z', 'l0', 'l1', 'l2'); s22.parameters = ('Z', 'l0', 'l1', 'l2')
-            s12.parameters = ('Z', 'l0', 'l1', 'l2', 'S'); s21.parameters = ('Z', 'l0', 'l1', 'l2', 'S')
+            s11.set_parameters(parameters=['l0', 'l1', 'l2'])
+            s22.set_parameters(parameters=['l0', 'l1', 'l2'])
+            s12.set_parameters(parameters=['l0', 'l1', 'l2'])
+            s21.set_parameters(parameters=['l0', 'l1', 'l2'])
 
     # Real Instantiation
     else:
         if type(model_type) == OpenModel:
-            s11.parameters = ('Z', 'c'); s22.parameters = ('Z', 'c')
-            s12.parameters = ('Z', 'c', 'S'); s21.parameters = ('Z', 'c', 'S')
+            s11.set_parameters(parameters=['c'])
+            s22.set_parameters(parameters=['c'])
+            s12.set_parameters(parameters=['c'])
+            s21.set_parameters(parameters=['c'])
         elif type(model_type) == ShortModel:
-            s11.parameters = ('Z', 'l'); s22.parameters = ('Z', 'l')
-            s12.parameters = ('Z', 'l', 'S'); s21.parameters = ('Z', 'l', 'S')
+            s11.set_parameters(parameters=['l'])
+            s22.set_parameters(parameters=['l'])
+            s12.set_parameters(parameters=['l'])
+            s21.set_parameters(parameters=['l'])
+            print 'params set'
         elif type(model_type) == ReciprocalModel:
-            s22.parameters = 'S'
+            s22.set_parameters(parameters=['s'])
         else:
-            s12.parameters = ('Z', 'S'); s21.parameters = ('Z', 'S')
+            s12.set_parameters(parameters=['s'])
+            s21.set_parameters(parameters=['s'])
 
     # Real/Imaginary Plot
     if re.search('ri', plot_options['format'], re.IGNORECASE):
-        # s11.fit_data(model_type.f, model_type.s_params()[0].real)
-        # s11.fit_data(model_type.f, model_type.s_params()[0].imag)
+        s11.fit_data(model_type.f, model_type.s_params()[0].real)
+        s11.fit_data(model_type.f, model_type.s_params()[0].imag)
+        # print 'done w/ s11'
         # s12.fit_data(model_type.f, model_type.s_params()[1].real)
+        # print 'done w/ s12 real'
+        # quit()
         # s12.fit_data(model_type.f, model_type.s_params()[1].imag)
         # s21.fit_data(model_type.f, model_type.s_params()[2].real)
         # s21.fit_data(model_type.f, model_type.s_params()[2].imag)
         # s22.fit_data(model_type.f, model_type.s_params()[3].real)
         # s22.fit_data(model_type.f, model_type.s_params()[3].imag)
+        print 'successfully fit both!'
 
         plt.figure(1)
         plt.subplot(211)
@@ -438,11 +456,10 @@ def plot_params(model_type, **kwargs):
 
     # Parameter Frequency Plot
     else:
-        # TODO- Fitting the data is failing due to minpack error, plotting works fine though
-        # s11.fit_data(model_type.f, model_type.s_params()[0])
-        # s12.fit_data(model_type.f, model_type.s_params()[1])
-        # s21.fit_data(model_type.f, model_type.s_params()[2])
-        # s22.fit_data(model_type.f, model_type.s_params()[3])
+        s11.fit_data(model_type.f, model_type.s_params()[0], initial_guess={'l': model_type.l})
+        s22.fit_data(model_type.f, model_type.s_params()[3], initial_guess={'l': model_type.l})
+        s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'l': model_type.l})
+        s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l})
 
         plt.plot(model_type.f, model_type.s_params()[0], label='s11')
         plt.plot(model_type.f, model_type.s_params()[1], label='s12')
@@ -451,7 +468,7 @@ def plot_params(model_type, **kwargs):
         plt.ylabel('S Parameters')
         plt.title("S Parameters vs. Frequency")
 
-    plt.xlabel('Frequency [10 GigaHertz]')
+    plt.xlabel('Frequency [10 Hertz]')
     plt.show()
     return
 
@@ -470,23 +487,9 @@ def calc_mag(a):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # test_two_port_model()
-
-plot_params(OpenModel(complex=True), format="MP")
-quit()
-
-# Broken test
-v = TwoPortModel()
-s12 = FunctionalModel(parameters=['Z', 'S'], variables='f', equation=v.eqn[1])
-print v.eqn[1]
-#s12.fit_data(v.f, v.s_params()[1])
-plt.plot(v.f, v.s_params()[1], label='s12')
-plt.show()
-quit()
-
-
-
-
-
+# sympy.pprint(ShortModel().equation_list[1], use_unicode=False)
+# quit()
+plot_params(ShortModel(), format="")
 
 
 
