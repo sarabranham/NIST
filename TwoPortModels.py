@@ -202,6 +202,7 @@ class OpenModel(TwoPortModel):
                               for i in range(len(self.f))]
                     print "Default parameter input c0=c1=c2=" + str(self.c0)
         for i in range(len(self.equation_list)):
+            self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
             self.equation_list[i] = self.equation_list[i].subs(zeta, z_c)
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
@@ -350,8 +351,6 @@ def plot_params(model_type, **kwargs):
     # Create Models
     s11 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[0])
     s22 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[3])
-
-    # TODO - figure out why this has a complex infinity error
     s12 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[1])
     s21 = FunctionalModel(parameters=['l'], variables='f', equation=model_type.equation_list[2])
 
@@ -375,12 +374,13 @@ def plot_params(model_type, **kwargs):
             s22.set_parameters(parameters=['c'])
             s12.set_parameters(parameters=['c'])
             s21.set_parameters(parameters=['c'])
+            print s11.parameters
+            quit()
         elif type(model_type) == ShortModel:
             s11.set_parameters(parameters=['l'])
             s22.set_parameters(parameters=['l'])
             s12.set_parameters(parameters=['l'])
             s21.set_parameters(parameters=['l'])
-            print 'params set'
         elif type(model_type) == ReciprocalModel:
             s22.set_parameters(parameters=['s'])
         else:
@@ -487,9 +487,9 @@ def calc_mag(a):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # test_two_port_model()
-# sympy.pprint(ShortModel().equation_list[1], use_unicode=False)
+# sympy.pprint(ShortModel().equation_list[0], use_unicode=False)
 # quit()
-plot_params(ShortModel(), format="")
+plot_params(OpenModel(), format="")
 
 
 
