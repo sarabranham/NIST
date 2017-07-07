@@ -523,8 +523,8 @@ def separate_imag(eqn, model_type):
     sympy.pprint(eqn, use_unicode=False)
     quit()
     conjugate = (50 - 2 * sympy.pi * I * L) if model_type == 'short' else 50 - (I*L)/(2*sympy.pi)
-    # sympy.pprint(conjugate, use_unicode=False)
-    # quit()
+    sympy.pprint(conjugate, use_unicode=False)
+    quit()
     eqn = expand(eqn) * conjugate
     sympy.pprint(eqn, use_unicode=False)
     eqn = expand(simplify(eqn, ratio=2))
