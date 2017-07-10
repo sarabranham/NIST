@@ -359,15 +359,19 @@ def plot_params(model_type, **kwargs):
     # Complex Plots
     if model_type.complex:
         if type(model_type) == OpenModel:
-            s11.parameters = ['c0', 'c1', 'c2']
-            s12.parameters = ['c0', 'c1', 'c2']
-            s21.parameters = ['c0', 'c1', 'c2']
-            s22.parameters = ['c0', 'c1', 'c2']
+            s11_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[1])
+            s11_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[3])
+            s22_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[1])
+            s22_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[3])
+            # s12.parameters = ['c0', 'c1', 'c2']
+            # s21.parameters = ['c0', 'c1', 'c2']
         else:
-            s11.parameters = ['l0', 'l1', 'l2']
-            s12.parameters = ['l0', 'l1', 'l2']
-            s21.parameters = ['l0', 'l1', 'l2']
-            s22.parameters = ['l0', 'l1', 'l2']
+            s11_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[1])
+            s11_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[3])
+            s22_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[1])
+            s22_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[3])
+            # s12.parameters = ['l0', 'l1', 'l2']
+            # s21.parameters = ['l0', 'l1', 'l2']
 
     # Real Instantiation
     else:
@@ -384,27 +388,26 @@ def plot_params(model_type, **kwargs):
 
     # Real/Imaginary Plot
     if re.search('ri', plot_options['format'], re.IGNORECASE):
-        import time
-        s11.fit_data(model_type.f, model_type.s_params()[0].real,
-                     initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                     else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        print "fit real"
-        quit()
-        time.sleep(1)
-        s11.fit_data(model_type.f, model_type.s_params()[0].imag,
-                     initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                     else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        print "fit imag"
-        # print 'done w/ s11'
+        s11_real.fit_data(model_type.f, model_type.s_params()[0].real,
+                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
+                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
+        s11_imag.fit_data(model_type.f, model_type.s_params()[0].imag,
+                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
+                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
+        s22_real.fit_data(model_type.f, model_type.s_params()[3].real,
+                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
+                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
+        s22_imag.fit_data(model_type.f, model_type.s_params()[3].imag,
+                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
+                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
+
         # s12.fit_data(model_type.f, model_type.s_params()[1].real)
-        # print 'done w/ s12 real'
-        # quit()
         # s12.fit_data(model_type.f, model_type.s_params()[1].imag)
         # s21.fit_data(model_type.f, model_type.s_params()[2].real)
         # s21.fit_data(model_type.f, model_type.s_params()[2].imag)
-        # s22.fit_data(model_type.f, model_type.s_params()[3].real)
-        # s22.fit_data(model_type.f, model_type.s_params()[3].imag)
-        print 'successfully fit both!'
+
+        print 'real: ', s11_real.parameter_values, 'imaginary: ', s11_imag.parameter_values
+        print 'real: ', s22_real.parameter_values, 'imaginary: ', s22_imag.parameter_values
 
         plt.figure(1)
         plt.subplot(211)
@@ -515,23 +518,17 @@ def calc_mag(a):
 
 
 def separate_imag(eqn, model_type):
-    from sympy import symbols, I, expand, simplify
-    l0, l1, l2, c0, c1, c2, L = symbols('l0 l1 l2 c0 c1 c2 L')
+    from sympy import symbols, expand, simplify, conjugate, denom, I
+    l0, l1, l2, c0, c1, c2, x = symbols('l0 l1 l2 c0 c1 c2 x')
+    L = symbols('L', real=True)
     eqn = eqn.subs(math.pi, sympy.pi)
-    eqn = eqn.subs(l0 + l1*f + l2*f**2, L) if model_type == 'short' else eqn.subs(1 / (c0+c1*f+c2*f**2), L)
-    eqn = eqn * 1 if model_type == 'short' else eqn * (2*sympy.pi*I*L)
-    sympy.pprint(eqn, use_unicode=False)
-    quit()
-    conjugate = (50 - 2 * sympy.pi * I * L) if model_type == 'short' else 50 - (I*L)/(2*sympy.pi)
-    sympy.pprint(conjugate, use_unicode=False)
-    quit()
-    eqn = expand(eqn) * conjugate
-    sympy.pprint(eqn, use_unicode=False)
-    eqn = expand(simplify(eqn, ratio=2))
-    eqn = eqn * (1 / (50 - 2 * sympy.pi * I * L))
-    eqn = expand(eqn)
-    return eqn
-
+    eqn = eqn.subs(f**2*l2 + f*l1 + l0, L) if model_type == 'short' else eqn.subs(1 / (c0+c1*f+c2*f**2), L)
+    conj = denom(conjugate(eqn))
+    eqn = simplify(expand(simplify(eqn)*conj))
+    eqn = simplify(eqn*1/conj)
+    # eqn = eqn.subs(L, l0 + l1*f + l2*f**2) if model_type == 'short' else eqn.subs(L, 1 / (c0+c1*f+c2*f**2))
+    return np.array(['real', simplify(eqn.subs(I, 0)),
+                     'imag', simplify(expand(eqn) - eqn.subs(sympy.I, 0)).subs(I, 1)])
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -539,46 +536,18 @@ def separate_imag(eqn, model_type):
 # test_two_port_model()
 
 # Test Plot
-# plot_params(OpenModel(), format="")
+# plot_params(ShortModel(complex=True), format="RI")
 # quit()
 
+# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[0:2], use_unicode=False)
+# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[2:], use_unicode=False)
+# quit()
 
-# Test Complex Plotting
-f_dat = [1.00000000e+08, 2.08888889e+09, 4.07777778e+09, 6.06666667e+09, 8.05555556e+09, 1.00444444e+10,
-         1.20333333e+10, 1.40222222e+10, 1.60111111e+10, 1.80000000e+10]
-s_dat = [-1.04081633, -1.04081633, -1.04081633, -1.04081633, -1.04081633, -1.04081633, -1.04081633, -1.04081633,
-         -1.04081633, -1.04081633]
-complex_model = ShortModel(complex=True)
-simple_model = ShortModel()
-# l0 = l1 = l2 = 1E-9, l = 0.00091
-
-l0, l1, l2, c0, c1, c2 = sympy.symbols('l0 l1 l2 c0 c1 c2')
-complex_eqn = (50 - 2*sympy.I*sympy.pi*(l0 + f*l1 + (f**2)*l2))/(2*sympy.I*sympy.pi*(l0 + f*l1 + (f**2)*l2) + 50)
-complex_ish_eqn = (50.0 - 2*math.pi*(l0 + f*l1 + (f**2)*l2))/(2*math.pi*(l0 + f*l1 + (f**2)*l2) + 50.0)
-simple_eqn = (50.0 - 2*math.pi*f*l)/(2*math.pi*f*l + 50.0)
-open_eqn = (50 - sympy.I/(2*sympy.pi*(c0 + c1*f + c2*f**2)))/(50 + sympy.I/(2*sympy.pi*(c0 + c1*f + c2*f**2)))
-
-
-sympy.pprint(separate_imag(open_eqn, 'open'), use_unicode=False)
-quit()
-
-simple_s11 = FunctionalModel(parameters=['l'], variables=['f'], equation=simple_eqn)
-simple_s11.fit_data(f_dat, simple_model.s_params()[0], initial_guess={'l': simple_model.l})
-print simple_s11.parameter_values
-
-ish_s11 = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables=['f'], equation=complex_ish_eqn)
-ish_s11.fit_data(complex_model.f, complex_model.s_params()[0].real, initial_guess={'l0': complex_model.l0, 'l1': complex_model.l1, 'l2': complex_model.l2})
-print ish_s11.parameter_values
-
-# complex_s11 = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables=['f'], equation=complex_eqn)
-# complex_s11.fit_data(f_dat, simple_model.s_params()[0], initial_guess={'l0': complex_model.l0, 'l1': complex_model.l1, 'l2': complex_model.l2})
-# print complex_s11.parameter_values
-
-
-
-
-
-
-
-
-
+""" expand s12/s21, subs(I,0) - should have real component, figure out how to get real components out of root
+    unrelated - check https://lmfit.github.io/lmfit-py/intro.html """
+m = ShortModel(complex=True)
+l0, l1, l2 = sympy.symbols('l0 l1 l2')
+L = sympy.symbols('L', real=True)
+s11_eqn = separate_imag(m.equation_list[0], 'short')[1] + separate_imag(m.equation_list[0], 'short')[3]
+print s11_eqn
+s21_eqn = sympy.sqrt(1 - s11_eqn**2)
