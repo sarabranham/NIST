@@ -18,6 +18,11 @@ except:
     print("The module math either was not found or has an error")
     raise
 try:
+    import lmfit
+except:
+    print("The module lmfit either was not found or has an error")
+    raise
+try:
     import numpy as np
 except:
     print("The module numpy either was not found or has an error")
@@ -45,7 +50,6 @@ except:
     raise
 
 # ----------------------------------------------------------------------------------------------------------------------
-
 
 class TwoPortModel(object):
 
@@ -120,7 +124,6 @@ class TwoPortModel(object):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-
 class ReciprocalModel(TwoPortModel):
     def __init__(self, **kwargs):
         defaults = {"frequency": None,
@@ -147,7 +150,6 @@ class ReciprocalModel(TwoPortModel):
         return s11, s12, s21, s22
 
 # ----------------------------------------------------------------------------------------------------------------------
-
 
 class OpenModel(TwoPortModel):
 
@@ -235,9 +237,7 @@ class OpenModel(TwoPortModel):
                     a[j].append(p)
             return a
 
-
 # ----------------------------------------------------------------------------------------------------------------------
-
 
 class ShortModel(TwoPortModel):
 
@@ -246,7 +246,8 @@ class ShortModel(TwoPortModel):
                     "inductance": None,
                     "impedance": None,
                     "complex": None,
-                    "l1, l2, l3": None}
+                    "l1, l2, l3": None,
+                    "plot": None}
         self.options = {}
         for key, value in defaults.iteritems():
             self.options[key] = value
@@ -325,6 +326,54 @@ class ShortModel(TwoPortModel):
                 for p in self.complex_calc_s(self.z[j]):
                     a[j].append(p)
             return a
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+# TODO - class ComplexPlot with some changing equations and conditional params?
+# https://github.com/gitj/lmfit-py/blob/4fbd015f08208c0d64110629b4081c8836545ea5/examples/complex_resonator_model.ipynb
+# use predefined equations or interface with fitting, use model.eqn, and recast from sympy? (not sure if = residual)
+def short_equation(f, z_0, z_real, l_0, l_1, l_2):
+    z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
+    return (z_0 - z) / (z_0 + z)
+
+dict().pop('verbose', None)
+
+
+class ComplexPlot(lmfit.model.Model):
+    def __init__(self, *args, **kwargs):
+        # pass in the defining equation - should be options
+        super(ComplexPlot, self).__init__(short_equation, *args, **kwargs)
+        # Set initial guesses here
+        self.set_param_hint('Q', min=0)
+
+    def guess(self, data, f=None, **kwargs):
+        verbose = kwargs.pop('verbose', None)
+        if f is None:
+            return
+        argmin_s21 = np.abs(data).argmin()
+        fmin = f.min()
+        fmax = f.max()
+        # guess that the resonance is the lowest point
+        f_0_guess = f[argmin_s21]
+        # assume the user isn't trying to fit just a small part of a resonance curve.
+        Q_min = 0.1 * (f_0_guess / (fmax - fmin))
+        # assume f is sorted
+        delta_f = np.diff(f)
+        min_delta_f = delta_f[delta_f > 0].min()
+        # assume data actually samples the resonance reasonably
+        Q_max = f_0_guess / min_delta_f
+        # geometric mean, why not?
+        Q_guess = np.sqrt(Q_min * Q_max)
+        Q_e_real_guess = Q_guess / (1 - np.abs(data[argmin_s21]))
+        if verbose:
+            print "fmin=", fmin, "fmax=", fmax, "f_0_guess=", f_0_guess
+            print "Qmin=", Q_min, "Q_max=", Q_max, "Q_guess=", Q_guess, "Q_e_real_guess=", Q_e_real_guess
+        params = self.make_params(Q=Q_guess, Q_e_real=Q_e_real_guess, Q_e_imag=0, f_0=f_0_guess)
+        params['%sQ' % self.prefix].set(min=Q_min, max=Q_max)
+        params['%sf_0' % self.prefix].set(min=fmin, max=fmax)
+        return lmfit.models.update_param_vals(params, self.prefix, **kwargs)
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Testing Scripts
@@ -545,9 +594,9 @@ def separate_imag(eqn, model_type):
 
 """ expand s12/s21, subs(I,0) - should have real component, figure out how to get real components out of root
     unrelated - check https://lmfit.github.io/lmfit-py/intro.html """
-m = ShortModel(complex=True)
-l0, l1, l2 = sympy.symbols('l0 l1 l2')
-L = sympy.symbols('L', real=True)
-s11_eqn = separate_imag(m.equation_list[0], 'short')[1] + separate_imag(m.equation_list[0], 'short')[3]
-print s11_eqn
-s21_eqn = sympy.sqrt(1 - s11_eqn**2)
+# m = ShortModel(complex=True)
+# l0, l1, l2 = sympy.symbols('l0 l1 l2')
+# L = sympy.symbols('L', real=True)
+# s11_eqn = separate_imag(m.equation_list[0], 'short')[1] + separate_imag(m.equation_list[0], 'short')[3]
+# print s11_eqn
+# s21_eqn = sympy.sqrt(1 - s11_eqn**2)
