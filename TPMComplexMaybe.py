@@ -243,7 +243,19 @@ class OpenModel(TwoPortModel):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-class ShortModel(TwoPortModel):
+def short_equation(f, z_0, z_real, l_0, l_1, l_2):
+    z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
+    return (z_0 - z) / (z_0 + z)
+
+
+def linear_resonator(f, f_0, Q, Q_e_real, Q_e_imag):
+    Q_e = Q_e_real + 1j*Q_e_imag
+    return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
+
+dict().pop('verbose', None)
+
+
+class ShortModel(TwoPortModel, lmfit.model.Model):
 
     def __init__(self, **options):
         defaults = {"frequency": None,
@@ -257,7 +269,13 @@ class ShortModel(TwoPortModel):
             self.plot_options[key] = value
         for key, value in options.iteritems():
             self.plot_options[key] = value
-        # test if any vars in superclass
+
+        # Initialize Plot Route
+        # pass in the defining equation so the user doesn't have to later.
+        lmfit.model.Model.__init__(self, linear_resonator, **options)
+        self.set_param_hint('z_0', min=0)
+
+        # Initialize Math Route
         TwoPortModel.__init__(self, **self.plot_options)
 
         # set inductance
@@ -331,38 +349,18 @@ class ShortModel(TwoPortModel):
                     a[j].append(p)
             return a
 
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-# TODO - class ComplexPlot with some changing equations and conditional params?
-# https://github.com/gitj/lmfit-py/blob/4fbd015f08208c0d64110629b4081c8836545ea5/examples/complex_resonator_model.ipynb
-# use predefined equations or interface with fitting, use model.eqn, and recast from sympy? (not sure if = residual)
-def short_equation(f, z_0, z_real, l_0, l_1, l_2):
-    z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
-    return (z_0 - z) / (z_0 + z)
-
-dict().pop('verbose', None)
-
-
-class ComplexPlot(lmfit.model.Model):
-    def __init__(self, *args, **options):
-        # pass in the defining equation - should be options
-        super(ComplexPlot, self).__init__(short_equation, *args, **options)
-        # Set initial guesses here
-        # TODO figure out how to use two models at the same time? these classes won't combine well
-        self.set_param_hint('l_0', min=0)
-
-
+    # Deal with Plotting
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
             return
+        # find the minimum value/where for s21
         argmin_s21 = np.abs(data).argmin()
         fmin = f.min()
         fmax = f.max()
         # guess that the resonance is the lowest point
         f_0_guess = f[argmin_s21]
-        # assume the user isn't trying to fit just a small part of a resonance curve.
+        # assume full curve
         Q_min = 0.1 * (f_0_guess / (fmax - fmin))
         # assume f is sorted
         delta_f = np.diff(f)
@@ -394,172 +392,6 @@ def test_two_port_model():
     print "\n Short:"
     print ShortModel().data()
     print ShortModel(complex=True).data()
-
-
-# Fitting is not liking any of my eqns - but plotting totally works
-def plot_params(model_type, **options):
-    """ Assumes instantiated model will be input, plots the model according to parameters and keyword 'format'
-        RI = real imaginary vs. freq, MP = magnitude phase vs. freq, default = s parameter vs. freq """
-    defaults = {"format": None}
-    plot_options = {}
-    for key, value in defaults.iteritems():
-        plot_options[key] = value
-    for key, value in options.iteritems():
-        plot_options[key] = value
-
-    # Create Models
-    s11 = FunctionalModel(parameters=['zeta'], variables='f', equation=model_type.equation_list[0])
-    s12 = FunctionalModel(parameters=['zeta'], variables='f', equation=model_type.equation_list[1])
-    s21 = FunctionalModel(parameters=['zeta'], variables='f', equation=model_type.equation_list[2])
-    s22 = FunctionalModel(parameters=['zeta'], variables='f', equation=model_type.equation_list[3])
-
-    # Complex Plots
-    if model_type.complex:
-        if type(model_type) == OpenModel:
-            s11_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[1])
-            s11_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[3])
-            s22_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[1])
-            s22_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[3])
-            # s12.parameters = ['c0', 'c1', 'c2']
-            # s21.parameters = ['c0', 'c1', 'c2']
-        else:
-            s11_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[1])
-            s11_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[3])
-            s22_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[1])
-            s22_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[3])
-            # s12.parameters = ['l0', 'l1', 'l2']
-            # s21.parameters = ['l0', 'l1', 'l2']
-
-    # Real Instantiation
-    else:
-        if type(model_type) == OpenModel:
-            s11.parameters = ['c']
-            s12.parameters = ['c']
-            s21.parameters = ['c']
-            s22.parameters = ['c']
-        elif type(model_type) == ShortModel:
-            s11.parameters = ['l']
-            s12.parameters = ['l']
-            s21.parameters = ['l']
-            s22.parameters = ['l']
-
-    # Real/Imaginary Plot
-    if re.search('ri', plot_options['format'], re.IGNORECASE):
-        s11_real.fit_data(model_type.f, model_type.s_params()[0].real,
-                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s11_imag.fit_data(model_type.f, model_type.s_params()[0].imag,
-                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s22_real.fit_data(model_type.f, model_type.s_params()[3].real,
-                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s22_imag.fit_data(model_type.f, model_type.s_params()[3].imag,
-                          initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
-                          else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-
-        # s12.fit_data(model_type.f, model_type.s_params()[1].real)
-        # s12.fit_data(model_type.f, model_type.s_params()[1].imag)
-        # s21.fit_data(model_type.f, model_type.s_params()[2].real)
-        # s21.fit_data(model_type.f, model_type.s_params()[2].imag)
-
-        print 'real: ', s11_real.parameter_values, 'imaginary: ', s11_imag.parameter_values
-        print 'real: ', s22_real.parameter_values, 'imaginary: ', s22_imag.parameter_values
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.plot(model_type.f, model_type.s_params()[0].real, label='s11')
-        plt.plot(model_type.f, model_type.s_params()[1].real, label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2].real, label='s21')
-        plt.plot(model_type.f, model_type.s_params()[3].real, label='s22')
-        plt.ylabel("Real")
-        plt.title("Real Component vs. Frequency")
-
-        plt.subplot(212)
-        plt.plot(model_type.f, model_type.s_params()[0].imag, label='s11')
-        plt.plot(model_type.f, model_type.s_params()[1].imag, label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2].imag, label='s21')
-        plt.plot(model_type.f, model_type.s_params()[3].imag, label='s22')
-        plt.ylabel('Imaginary')
-        plt.title("Imaginary Component vs. Frequency")
-        plt.tight_layout()
-
-    # Magnitude/Phase Plot
-    elif re.search('mp', plot_options['format'], re.IGNORECASE):
-        s11.fit_data(model_type.f, calc_mag(model_type.s_params()[0]))
-        s11.fit_data(model_type.f, calc_phase(model_type.s_params()[0]))
-        # s12.fit_data(model_type.f, calc_mag(model_type.s_params()[1]))
-        # s12.fit_data(model_type.f, calc_phase(model_type.s_params()[1]))
-        # s21.fit_data(model_type.f, calc_mag(model_type.s_params()[2]))
-        # s21.fit_data(model_type.f, calc_phase(model_type.s_params()[2]))
-        # s22.fit_data(model_type.f, calc_mag(model_type.s_params()[3]))
-        # s22.fit_data(model_type.f, calc_phase(model_type.s_params()[3]))
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[0]), label='s11')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[1]), label='s12')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[2]), label='s21')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[3]), label='s22')
-        plt.ylabel("Magnitude")
-        plt.title("Magnitude vs. Frequency")
-
-        plt.subplot(212)
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[0]), label='s11')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[1]), label='s12')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[2]), label='s21')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[3]), label='s22')
-        plt.ylabel("Phase [rad]")
-        plt.title("Phase vs. Frequency")
-        plt.tight_layout()
-
-    # Smith Plot
-    # TODO - figure out how smith plots work
-    elif re.search('smith', plot_options['format'], re.IGNORECASE):
-        # Do Smith Plot Stuff
-        return
-
-    # Parameter Frequency Plot
-    else:
-        if type(model_type) == OpenModel or type(model_type) == ShortModel:
-            s11.fit_data(model_type.f, model_type.s_params()[0], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s22.fit_data(model_type.f, model_type.s_params()[3], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            # TODO figure out which plot_fits matter the most - subplots doesn't work
-            s11.plot_fit(model_type.f, model_type.s_params()[0], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s21.plot_fit(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-        else:
-            # Should these have a plot_fit if they aren't really dependent on f?
-            s11.fit_data(model_type.f, model_type.s_params()[0])
-            s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'zeta': model_type.z0})
-            s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'zeta': model_type.z0})
-            s22.fit_data(model_type.f, model_type.s_params()[3])
-
-        print 's11:', s11.parameter_values
-        print 's12:', s12.parameter_values
-        print 's21:', s21.parameter_values
-        print 's22:', s22.parameter_values
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.plot(model_type.f, model_type.s_params()[0], label='s11')
-        plt.plot(model_type.f, model_type.s_params()[3], label='s22')
-        plt.ylabel('S Parameters')
-        plt.title(str(type(model_type).__name__) + " S Parameters vs. Frequency")
-        plt.legend()
-
-        plt.subplot(212)
-        plt.plot(model_type.f, model_type.s_params()[1], label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2], label='s21')
-        plt.ylabel('S Parameters')
-        plt.title(str(type(model_type).__name__) + " S Parameters vs. Frequency")
-        plt.tight_layout()
-
-    plt.xlabel('Frequency [10 Hertz]')
-    plt.legend()
-    plt.show()
-    return
 
 
 def calc_phase(a):
@@ -722,7 +554,7 @@ def complex_plot(model, **options):
 # test_two_port_model()
 
 # Test New Plot
-plot(OpenModel())
+# plot(OpenModel())
 # print simple_plot(OpenModel(), index=1)
 
 
@@ -730,15 +562,31 @@ plot(OpenModel())
 # plot_params(ShortModel(complex=True), format="RI")
 # quit()
 
-# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[0:2], use_unicode=False)
-# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[2:], use_unicode=False)
-# quit()
+resonator = ShortModel()
+true_params = resonator.make_params(f_0=100, Q=10000, Q_e_real=9000, Q_e_imag=-9000)
+f = np.linspace(99.95, 100.05, 100)
+true_s21 = resonator.eval(params=true_params, f=f)
+noise_scale = 0.02
+measured_s21 = true_s21 + noise_scale*(np.random.randn(100) + 1j*np.random.randn(100))
 
-""" expand s12/s21, subs(I,0) - should have real component, figure out how to get real components out of root
-    unrelated - check https://lmfit.github.io/lmfit-py/intro.html """
-# m = ShortModel(complex=True)
-# l0, l1, l2 = sympy.symbols('l0 l1 l2')
-# L = sympy.symbols('L', real=True)
-# s11_eqn = separate_imag(m.equation_list[0], 'short')[1] + separate_imag(m.equation_list[0], 'short')[3]
-# print s11_eqn
-# s21_eqn = sympy.sqrt(1 - s11_eqn**2)
+#plt.plot(f, 20*np.log10(np.abs(measured_s21)))
+#plt.ylabel('|S21| (dB)')
+#plt.xlabel('MHz')
+#plt.title('simulated measurement')
+#plt.show()
+
+
+def plot_ri(data, *args, **kwargs):
+    plt.plot(data.real, data.imag, *args, **kwargs)
+
+guess = resonator.guess(measured_s21, f=f, verbose=True)
+result = resonator.fit(measured_s21, params=guess, f=f, verbose=True)
+fit_s21 = resonator.eval(params=result.params, f=f)
+guess_s21 = resonator.eval(params=guess, f=f)
+
+plot_ri(measured_s21, '.')
+plot_ri(fit_s21, 'r.-')
+plot_ri(guess_s21, 'k--')
+plt.xlabel('Re(S21)')
+plt.ylabel('Im(S21)')
+plt.show()
