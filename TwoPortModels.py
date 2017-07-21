@@ -601,31 +601,47 @@ def plot(model, **options):
     if plot_options['index']:
         all_plots = False
 
+    def format(x, pos):
+        return '%1.1fe-4' % (x*10**4)
+
+    def format2(x, pos):
+        return '%1.1fe2' % (x*10**-2)
+
+    from matplotlib.ticker import FuncFormatter
+
     if all_plots:
-        g, axarr = plt.subplots(2, 2)
-        axarr[0, 0].plot(simple_plot(model, index=0)[0], simple_plot(model, index=0)[1])
-        axarr[0, 0].plot(simple_plot(model, index=0)[0], simple_plot(model, index=0)[2])
+        fig, axarr = plt.subplots(2, 2)
+        axarr[0, 0].plot(simple_plot(model, index=0)[0]/10**9, 20*np.log10(simple_plot(model, index=0)[1]), 'b')
+        axarr[0, 0].plot(simple_plot(model, index=0)[0]/10**9, 20*np.log10(simple_plot(model, index=0)[2]), 'r')
+        axarr[0, 0].get_yaxis().set_major_formatter(FuncFormatter(format))
         axarr[0, 0].set_title('S11')
 
-        axarr[0, 1].plot(simple_plot(model, index=1)[0], simple_plot(model, index=1)[1])
-        axarr[0, 1].plot(simple_plot(model, index=1)[0], simple_plot(model, index=1)[2])
-        axarr[0, 1].set_ylim([-1E-6, 1E-5])if type(model) == ShortModel else None
+        axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, 20*np.log10(simple_plot(model, index=1)[1]), 'b')
+        axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, 20*np.log10(simple_plot(model, index=1)[2]), 'r')
+        axarr[0, 1].get_yaxis().set_major_formatter(FuncFormatter(format2))
+        # axarr[0, 1].set_ylim(([-1E-6, 5E-6])if type(model) == ShortModel else None)
         axarr[0, 1].set_title('S12')
 
-        axarr[1, 0].plot(simple_plot(model, index=2)[0], simple_plot(model, index=2)[1])
-        axarr[1, 0].plot(simple_plot(model, index=2)[0], simple_plot(model, index=2)[2])
-        axarr[1, 0].set_ylim([-1E-6, 1E-5])if type(model) == ShortModel else None
+        axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, 20*np.log10(simple_plot(model, index=2)[1]), 'b')
+        axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, 20*np.log10(simple_plot(model, index=2)[2]), 'r')
+        axarr[1, 0].get_yaxis().set_major_formatter(FuncFormatter(format2))
         axarr[1, 0].set_title('S21')
 
-        axarr[1, 1].plot(simple_plot(model, index=3)[0], simple_plot(model, index=3)[1])
-        axarr[1, 1].plot(simple_plot(model, index=3)[0], simple_plot(model, index=3)[2])
+        axarr[1, 1].plot(simple_plot(model, index=3)[0]/10**9, 20*np.log10(simple_plot(model, index=3)[1]), 'b')
+        axarr[1, 1].plot(simple_plot(model, index=3)[0]/10**9, 20*np.log10(simple_plot(model, index=3)[2]), 'r')
+        axarr[1, 1].get_yaxis().set_major_formatter(FuncFormatter(format))
         axarr[1, 1].set_title('S22')
+
+        fig.text(0.5, 0.008, 'Frequency [GHz]', ha='center')
+        fig.text(0.008, 0.5, 'Magnitude [dB]', va='center', rotation='vertical')
+        fig.suptitle('Short S Parameters', fontsize=18)
+        fig.tight_layout()
+        fig.subplots_adjust(top=0.86)
 
     else:
         plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[1], 'b')
         plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[2], 'r')
 
-    plt.tight_layout()
     plt.show()
 
 
@@ -651,9 +667,9 @@ def simple_plot(model, **options):
         noise = plot_options['noise']
     else:
         if type(model) == ShortModel and (index == 0 or index == 3):
-            noise = 3E-5
-        else:
             noise = 1E-5
+        else:
+            noise = 5E-6
     if plot_options['s']:
         sim_s = plot_options['s']
     else:
@@ -678,7 +694,7 @@ def simple_plot(model, **options):
             p.add('s', 0.98)
             def residual(param):
                 v = param.valuesdict()
-                return (v['z0']/(2*np.pi*model.f*v['l']))**(1/2) * (1 - v['s']) - sim_s
+                return (v['z0']/(20*np.pi*model.f*v['l']))**(1/2) * (1 - v['s']) - sim_s
 
     elif type(model) == OpenModel and not model.complex:
         p.add_many(('c', model.c), ('z0', model.z0))
@@ -706,13 +722,17 @@ def simple_plot(model, **options):
         print 'Model must be type ShortModel or OpenModel'
         return
 
+    # if index == 1 or index == 2:
+    #    for i in range(len(sim_s)):
+    #        while sim_s[i] > 2E-9:
+    #            sim_s[i] = sim_s[i]/10
+
     mi = lmfit.minimize(residual, p, method="powell" if index % 3 == 0 else "leastsq")
     # print(lmfit.fit_report(mi, show_correl=False))
     return [model.f, abs(sim_s), abs(residual(mi.params) + sim_s)]
 
 
 def complex_plot(model, **options):
-
     return ':('
 
 
@@ -723,7 +743,7 @@ def complex_plot(model, **options):
 
 # Test New Plot
 plot(OpenModel())
-# print simple_plot(OpenModel(), index=1)
+# simple_plot(OpenModel(), index=0)
 
 
 # Test Plot

@@ -243,12 +243,16 @@ class OpenModel(TwoPortModel):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def short_equation(f, z_0, z_real, l_0, l_1, l_2):
-    z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
-    return (z_0 - z) / (z_0 + z)
+def short_equation(f, z_0, l_0_real, l_0_imag):
+    # z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
+    l_0 = l_0_real + 1j*2*math.pi*l_0_imag
+    # l_1 = (l_1_real + 1j*2*math.pi*l_1_imag)
+    # l_2 = (l_2_real + 1j*2*math.pi*l_2_imag)
+    return (z_0 - (l_0 + 1E-9*f + 1E-9*f**2)) / (z_0 + (l_0 + 1E-9*f + 1E-9*f**2))
 
 
 def linear_resonator(f, f_0, Q, Q_e_real, Q_e_imag):
+    print 'f', f, '\nf0', f_0, 'q', Q, 'q.real', Q_e_real, 'q.imag', Q_e_imag
     Q_e = Q_e_real + 1j*Q_e_imag
     return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
 
@@ -272,8 +276,11 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
 
         # Initialize Plot Route
         # pass in the defining equation so the user doesn't have to later.
-        lmfit.model.Model.__init__(self, linear_resonator, **options)
+        # lmfit.model.Model.__init__(self, linear_resonator, **options)
+        # self.set_param_hint('Q', min=0)
+        lmfit.model.Model.__init__(self, short_equation, **options)
         self.set_param_hint('z_0', min=0)
+
 
         # Initialize Math Route
         TwoPortModel.__init__(self, **self.plot_options)
@@ -350,6 +357,10 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
             return a
 
     # Deal with Plotting
+    # z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2) return (z_0 - z) / (z_0 + z)
+    # assume: 40 < z0 < 50,
+    # Q_e = Q_e_real + 1j*Q_e_imag return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
+    #
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
@@ -367,7 +378,7 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         min_delta_f = delta_f[delta_f > 0].min()
         # assume data actually samples the resonance reasonably
         Q_max = f_0_guess / min_delta_f
-        # geometric mean, why not?
+        # geometric mean
         Q_guess = np.sqrt(Q_min * Q_max)
         Q_e_real_guess = Q_guess / (1 - np.abs(data[argmin_s21]))
         if verbose:
@@ -376,6 +387,33 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         params = self.make_params(Q=Q_guess, Q_e_real=Q_e_real_guess, Q_e_imag=0, f_0=f_0_guess)
         params['%sQ' % self.prefix].set(min=Q_min, max=Q_max)
         params['%sf_0' % self.prefix].set(min=fmin, max=fmax)
+        return lmfit.models.update_param_vals(params, self.prefix, **options)
+
+    def guess(self, data, f=None, **options):
+        verbose = options.pop('verbose', None)
+        if f is None:
+            return
+        argmin_s11 = np.abs(data).argmin()
+        fmin = f.min()
+        fmax = f.max()
+        f_0_guess = f[argmin_s11]
+        delta_f = np.diff(f)
+        min_delta_f = delta_f[delta_f > 0].min()
+        z0_min = 0.1 * (f_0_guess / (fmax - fmin))
+        z0_max = f_0_guess / min_delta_f
+        z0_guess = np.sqrt(z0_min * z0_max)
+        # print z0_guess
+        l0_imag_guess = (1 - abs(data[argmin_s11])) / z0_guess
+        # quit()
+        # l0_real_guess = z0_guess / (1 - np.abs(data[argmin_s11]))
+        # print l0_real_guess
+        if verbose:
+            print "fmin=", fmin, "fmax=", fmax, "f_0_guess=", f_0_guess
+            print "Z_0_min=", z0_min, "Z_0_max=", z0_max, "Z_0_guess=", z0_guess, "l_0_imag_guess=", l0_imag_guess
+        # params = self.make_params(z_0=z0_guess, l_0_real=l0_real_guess, l_0_imag=0, f=f_0_guess)
+        params = self.make_params(z_0=z0_guess, l_0_real=0, l_0_imag=l0_imag_guess, f=f_0_guess)
+        # params['%sz_0' % self.prefix].set(min=z0_min, max=z0_max)
+        # params['%sf' % self.prefix].set(min=fmin, max=fmax)
         return lmfit.models.update_param_vals(params, self.prefix, **options)
 
 
@@ -562,31 +600,74 @@ def complex_plot(model, **options):
 # plot_params(ShortModel(complex=True), format="RI")
 # quit()
 
-resonator = ShortModel()
-true_params = resonator.make_params(f_0=100, Q=10000, Q_e_real=9000, Q_e_imag=-9000)
-f = np.linspace(99.95, 100.05, 100)
-true_s21 = resonator.eval(params=true_params, f=f)
-noise_scale = 0.02
-measured_s21 = true_s21 + noise_scale*(np.random.randn(100) + 1j*np.random.randn(100))
+# resonator = ShortModel()
+# true_params = resonator.make_params(f_0=100, Q=10000, Q_e_real=9000, Q_e_imag=-9000)
+# print true_params
+# f = np.linspace(99.95, 100.05, 100)
+# true_s21 = resonator.eval(params=true_params, f=f)
+# quit()
+# noise_scale = 0.02
+# measured_s21 = true_s21 + noise_scale*(np.random.randn(100) + 1j*np.random.randn(100))
 
-#plt.plot(f, 20*np.log10(np.abs(measured_s21)))
-#plt.ylabel('|S21| (dB)')
-#plt.xlabel('MHz')
-#plt.title('simulated measurement')
-#plt.show()
+short = ShortModel(complex=True)
+true_params = short.make_params(z_0=short.z0, l_0_real=0, l_0_imag=short.l0, f_0=100)
+freq = np.linspace(17E9, 18E9, 100)
+# freq = np.linspace(99.95, 100.05, 100)
+noise_scale = 3E-10
+true_s11 = short.eval(params=true_params, f=freq)
+
+# complex noise
+measured_s11 = true_s11 + noise_scale*(np.random.randn(len(freq)) + 1j*np.random.randn(len(freq)))
+# plt.plot(freq, 20*np.log10(np.abs(measured_s11)))
+
+# def label(x, pos):
+#    return '%1.1fe-4' % (x*1E4)
+
+# formatter = plt.FuncFormatter(label)
+# fig, ax = plt.subplots()
+# ax.yaxis.set_major_formatter(formatter)
+# plt.plot(freq, 20*np.log10(np.abs(measured_s11)))
+
+# plt.ylabel('|S11| (dB)')
+# plt.xlabel('MHz')
+# plt.title('simulated measurement')
+# plt.ylim(-1E-4, 1E-4)
+# plt.show()
+
+# plt.plot(f, 20*np.log10(np.abs(measured_s21)))
+# plt.ylabel('|S21| (dB)')
+# plt.xlabel('MHz')
+# plt.title('simulated measurement')
+# plt.show()
 
 
 def plot_ri(data, *args, **kwargs):
     plt.plot(data.real, data.imag, *args, **kwargs)
 
-guess = resonator.guess(measured_s21, f=f, verbose=True)
-result = resonator.fit(measured_s21, params=guess, f=f, verbose=True)
-fit_s21 = resonator.eval(params=result.params, f=f)
-guess_s21 = resonator.eval(params=guess, f=f)
+# guess = resonator.guess(measured_s21, f=f, verbose=True)
+# result = resonator.fit(measured_s21, params=guess, f=f, verbose=True)
+# fit_s21 = resonator.eval(params=result.params, f=f)
+# guess_s21 = resonator.eval(params=guess, f=f)
 
-plot_ri(measured_s21, '.')
-plot_ri(fit_s21, 'r.-')
-plot_ri(guess_s21, 'k--')
-plt.xlabel('Re(S21)')
-plt.ylabel('Im(S21)')
+guess = short.guess(measured_s11, f=freq, verbose=False)
+result = short.fit(measured_s11, params=guess, f=freq, verbose=False)
+print result.params
+fit_s11 = short.eval(params=result.params, f=freq)
+guess_s11 = short.eval(params=guess, f=freq)
+plt.plot(freq/10**10, 20*np.log10(np.abs(true_s11)), 'r.-')
+# plt.plot(freq/10**10, 20*np.log10(np.abs(fit_s11)), 'b.-')
+plt.plot(freq/10**10, 20*np.log10(np.abs(measured_s11)), 'k--')
+plt.ticklabel_format(axis='y', style='')
+plt.ylabel('|S11| (dB)')
+plt.xlabel('MHz')
+plt.show()
+quit()
+
+
+# plot_ri(measured_s11, '.')
+plot_ri(true_s11)
+# plot_ri(fit_s11, 'r.-')
+# plot_ri(guess_s11, 'k--')
+plt.xlabel('Re(S11)')
+plt.ylabel('Im(S11)')
 plt.show()
