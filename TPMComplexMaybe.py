@@ -4,7 +4,8 @@
 # Author:      Sara Branham
 # Created:     7/10/2017
 # ----------------------------------------------------------------------------------------------------------------------
-""" TPMComplexMaybe is an experimental module for fitting/calculating parameters of complex models.
+""" TPMComplexMaybe is an experimental module that uses multiple inheritance for fitting/calculating parameters of
+    complex models.
 
     Example:
     -------
@@ -278,10 +279,10 @@ class OpenModel(TwoPortModel):
             return a
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Experimental Class
 
 
 def short_equation(f, z_0, l_0_real, l_0_imag):
-    # z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2)
     l_0 = l_0_real + 1j*2*math.pi*l_0_imag
     # l_1 = (l_1_real + 1j*2*math.pi*l_1_imag)
     # l_2 = (l_2_real + 1j*2*math.pi*l_2_imag)
@@ -291,13 +292,16 @@ def short_equation(f, z_0, l_0_real, l_0_imag):
 def linear_resonator(f, f_0, Q, Q_e_real, Q_e_imag):
     print 'f', f, '\nf0', f_0, 'q', Q, 'q.real', Q_e_real, 'q.imag', Q_e_imag
     Q_e = Q_e_real + 1j*Q_e_imag
-    return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
+    return 1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0))
 
 dict().pop('verbose', None)
 
 
 class ShortModel(TwoPortModel, lmfit.model.Model):
-
+    """
+    ShortModel is an experimental class that utilizes multiple inheritance to attempt complex modeling - based on
+    https://github.com/gitj/lmfit-py/blob/4fbd015f08208c0d64110629b4081c8836545ea5/examples/complex_resonator_model.ipynb
+    """
     def __init__(self, **options):
         defaults = {"frequency": None,
                     "inductance": None,
@@ -317,7 +321,6 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         # self.set_param_hint('Q', min=0)
         lmfit.model.Model.__init__(self, short_equation, **options)
         self.set_param_hint('z_0', min=0)
-
 
         # Initialize Math Route
         TwoPortModel.__init__(self, **self.plot_options)
@@ -367,13 +370,38 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_complex_coefs(self, l0, l1, l2):
+        """ Sets complex coefficients (l0, l1, l2) and recalculates impedance. """
         self.l0 = l0
         self.l1 = l1
         self.l2 = l2
         self.z = [complex(2 * math.pi * (self.l0 + self.l1 * self.f[i] + self.l2 * self.f[i] ** 2), 1) for
                   i in range(len(self.f))]
 
+    def set_l(self, l):
+        """ Sets inductance and recalculates impedance. """
+        self.l = l
+        self.z = [2 * math.pi * self.f[j] * self.l for j in range(len(self.f))]
+
+    def set_complex(self, imag, **options):
+        """ Sets whether or not the model is complex
+            Can be used to reassign l OR l0/l1/l2 and recalculate impedance, if not provided will use default. """
+        self.complex = imag
+        complex_options = {}
+        for key, value in options.iteritems():
+            complex_options[key] = value
+        if self.complex:
+            if complex_options['l0'] and complex_options['l1'] and complex_options['l2']:
+                self.set_complex_coefs(complex_options['l0'], complex_options['l1'], complex_options['l2'])
+            else:
+                self.set_complex_coefs(1E-12, 1E-12, 1E-12)
+        else:
+            if complex_options['l']:
+                self.set_l(complex_options['l'])
+            else:
+                self.set_l(0.000910)
+
     def complex_calc_s(self, z):
+        """ Calculates S Parameters given complex values - uses cmath. """
         s11 = complex(self.z0, -z) / complex(self.z0, z)
         s21 = cmath.sqrt(self.z0/complex(0, z)) * (1 - np.absolute(s11))
         s22 = complex(-self.z0, z) / complex(self.z0, z)
@@ -381,6 +409,7 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         return s11, s12, s21, s22
 
     def data(self):
+        """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True. """
         a = [[self.f[i]] for i in range(len(self.f))]
         if not self.complex:
             for j in range(len(a)):
@@ -397,7 +426,8 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
     # z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2) return (z_0 - z) / (z_0 + z)
     # assume: 40 < z0 < 50,
     # Q_e = Q_e_real + 1j*Q_e_imag return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
-    #
+
+    # Guess from LMFIT
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
@@ -426,6 +456,7 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         params['%sf_0' % self.prefix].set(min=fmin, max=fmax)
         return lmfit.models.update_param_vals(params, self.prefix, **options)
 
+    # New Guess
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
@@ -455,33 +486,39 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Testing Scripts
+# Module Scripts
 
 
-def test_two_port_model():
+def test_model_calc():
+    """ Prints the calculations of all models. """
     # Short/Open: vals for s11, s22; others = 0, Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
-    # Load: all small values, get: s11 = 0.84, s12 = 0.57, s21 = 0.57, s22 = 0.84
-    print "Open:"
-    print OpenModel().data()
-    print OpenModel(complex=True).data()
-    print "\n Short:"
-    print ShortModel().data()
-    print ShortModel(complex=True).data()
+    # Load/Reciprocal: get: s11 = 0, s12 = 1, s21 = 1, s22 = 0
+    freq = np.linspace(1e8, 18e9, 10)
+    print "Simple TwoPort: ", TwoPortModel(frequency=freq).data()
+    print "\nReciprocal: ", ReciprocalModel(frequency=freq).data()
+    print "\nOpen: ", OpenModel(frequency=freq).data()
+    print "Open Complex: ", OpenModel(frequency=freq, complex=True).data()
+    print "\nShort: ", ShortModel(frequency=freq).data()
+    print "Short Complex: ", ShortModel(frequency=freq, complex=True).data()
 
 
 def calc_phase(a):
+    """ Calculates the phase for an array. """
     p = []
     [p.append(sympy.arg(i)) for i in a]
     return p
 
 
 def calc_mag(a):
+    """ Calculates the magnitude/real component for an array. """
     m = []
     [m.append(sympy.Abs(i)) for i in a]
     return m
 
 
 def separate_imag(eqn, model_type):
+    """ Separates the real and imaginary components of symbolic equations. """
+    # TODO - this doesn't really work for S12/S21
     from sympy import symbols, expand, simplify, conjugate, denom, I
     l0, l1, l2, c0, c1, c2, x = symbols('l0 l1 l2 c0 c1 c2 x')
     L = symbols('L', real=True)
@@ -618,24 +655,10 @@ def simple_plot(model, **options):
     return [model.f, abs(sim_s), abs(residual(mi.params) + sim_s)]
 
 
-def complex_plot(model, **options):
-
-    return ':('
-
-
 # ----------------------------------------------------------------------------------------------------------------------
-
-# Test Model
-# test_two_port_model()
-
-# Test New Plot
+# Runner
 # plot(OpenModel())
 # print simple_plot(OpenModel(), index=1)
-
-
-# Test Plot
-# plot_params(ShortModel(complex=True), format="RI")
-# quit()
 
 # resonator = ShortModel()
 # true_params = resonator.make_params(f_0=100, Q=10000, Q_e_real=9000, Q_e_imag=-9000)

@@ -72,6 +72,7 @@ except:
 # ----------------------------------------------------------------------------------------------------------------------
 # Module Classes
 
+
 class TwoPortModel(object):
     """ TwoPortModel is a class that models a standard load circuit. It uses sympy to provide both symbolic and numeric
         manipulation of equations. Initialize the class with a frequency, resistance, and characteristic impedance.
@@ -91,7 +92,7 @@ class TwoPortModel(object):
             self.plot_options[key] = value
         for key, value in options.iteritems():
             self.plot_options[key] = value
-
+        self.complex = False
         if isinstance(self.plot_options["frequency"], np.ndarray) or self.plot_options["frequency"]:
             self.f = self.plot_options["frequency"]
         else:
@@ -442,18 +443,22 @@ def test_model_calc():
     """ Prints the calculations of all models. """
     # Short/Open: vals for s11, s22; others = 0, Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
     # Load/Reciprocal: get: s11 = 0, s12 = 1, s21 = 1, s22 = 0
-    print "Simple TwoPort: ", TwoPortModel().data()
-    print "\nReciprocal: ", ReciprocalModel().data()
-    print "\nOpen: ", OpenModel().data()
-    print "Open Complex: ", OpenModel(complex=True).data()
-    print "\nShort: ", ShortModel().data()
-    print "Short Complex: ", ShortModel(complex=True).data()
+    freq = np.linspace(1e8, 18e9, 10)
+    print "Simple TwoPort: ", TwoPortModel(frequency=freq).data()
+    print "\nReciprocal: ", ReciprocalModel(frequency=freq).data()
+    print "\nOpen: ", OpenModel(frequency=freq).data()
+    print "Open Complex: ", OpenModel(frequency=freq, complex=True).data()
+    print "\nShort: ", ShortModel(frequency=freq).data()
+    print "Short Complex: ", ShortModel(frequency=freq, complex=True).data()
 
 
 # Fitting is not liking any of my eqns - but plotting totally works
 def plot_params(model_type, **options):
-    """ Assumes instantiated model will be input, plots the model according to parameters and keyword 'format'
-        RI = real imaginary vs. freq, MP = magnitude phase vs. freq, default = s parameter vs. freq """
+    """ Plots a Model and solves for parameters using FunctionalModels (in Fitting), only works for non-complex models
+        Ex: plot_params(OpenModel(), format='')
+        Format Options:
+            RI = real imaginary vs. freq, MP = magnitude phase vs. freq, default = s parameter vs. freq
+        Doesn't use simulated data, probably was supposed to? """
     defaults = {"format": None}
     plot_options = {}
     for key, value in defaults.iteritems():
@@ -498,7 +503,7 @@ def plot_params(model_type, **options):
             s22.parameters = ['l']
 
     # Real/Imaginary Plot
-    if re.search('ri', plot_options['format'], re.IGNORECASE):
+    if re.search('ri', plot_options['format'], re.IGNORECASE) and model_type.complex:
         s11_real.fit_data(model_type.f, model_type.s_params()[0].real,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
@@ -511,11 +516,6 @@ def plot_params(model_type, **options):
         s22_imag.fit_data(model_type.f, model_type.s_params()[3].imag,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-
-        # s12.fit_data(model_type.f, model_type.s_params()[1].real)
-        # s12.fit_data(model_type.f, model_type.s_params()[1].imag)
-        # s21.fit_data(model_type.f, model_type.s_params()[2].real)
-        # s21.fit_data(model_type.f, model_type.s_params()[2].imag)
 
         print 'real: ', s11_real.parameter_values, 'imaginary: ', s11_imag.parameter_values
         print 'real: ', s22_real.parameter_values, 'imaginary: ', s22_imag.parameter_values
@@ -539,7 +539,7 @@ def plot_params(model_type, **options):
         plt.tight_layout()
 
     # Magnitude/Phase Plot
-    elif re.search('mp', plot_options['format'], re.IGNORECASE):
+    elif re.search('mp', plot_options['format'], re.IGNORECASE) and model_type.complex:
         s11.fit_data(model_type.f, calc_mag(model_type.s_params()[0]))
         s11.fit_data(model_type.f, calc_phase(model_type.s_params()[0]))
         # s12.fit_data(model_type.f, calc_mag(model_type.s_params()[1]))
@@ -580,9 +580,6 @@ def plot_params(model_type, **options):
             s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
             s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
             s22.fit_data(model_type.f, model_type.s_params()[3], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            # TODO - figure out which plot_fits matter the most - subplots doesn't work
-            s11.plot_fit(model_type.f, model_type.s_params()[0], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s21.plot_fit(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
         else:
             # Should these have a plot_fit if they aren't really dependent on f?
             s11.fit_data(model_type.f, model_type.s_params()[0])
@@ -648,7 +645,7 @@ def separate_imag(eqn, model_type):
 
 def plot(model, **options):
     """ Will plot any model using helper methods (in theory), can use keyword args to specify noise, data, or number of
-        graphs.
+        graphs. Currently works for non-complex open and short models.
         Ex: plot(OpenModel(), noise=9E-4)
         Default Vals:
             - noise = 1E-5
@@ -685,13 +682,11 @@ def plot(model, **options):
         axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, simple_plot(model, index=1)[1], 'b')
         axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, simple_plot(model, index=1)[2], 'r')
         axarr[0, 1].get_yaxis().set_major_formatter(FuncFormatter(format2))
-        axarr[0, 1].set_ylim(1.375E-4, 1.525E-4)
         axarr[0, 1].set_title('S12')
 
         axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, simple_plot(model, index=2)[1], 'b')
         axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, simple_plot(model, index=2)[2], 'r')
         axarr[1, 0].get_yaxis().set_major_formatter(FuncFormatter(format2))
-        axarr[1, 0].set_ylim(1.375E-4, 1.525E-4)
         axarr[1, 0].set_title('S21')
 
         axarr[1, 1].plot(simple_plot(model, index=3)[0]/10**9, simple_plot(model, index=3)[1], 'b')
@@ -701,26 +696,28 @@ def plot(model, **options):
 
         fig.text(0.5, 0.008, 'Frequency [GHz]', ha='center')
         fig.text(0.008, 0.5, 'Magnitude', va='center', rotation='vertical')
-        fig.suptitle('Open S Parameters', fontsize=18)
+        fig.suptitle(str(type(model).__name__) + " S Parameters vs. Frequency", fontsize=18)
         fig.tight_layout()
         fig.subplots_adjust(top=0.86)
 
     else:
         plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[1], 'b')
         plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[2], 'r')
+        plt.title(str(type(model).__name__) + " S Parameters vs. Frequency")
 
     plt.show()
 
 
 def simple_plot(model, **options):
     """ This plots and fits simple versions of short/open/load s parameters
-        noise is the noise added to s param data,
-        index is the s parameter that the user wants (0-3), otherwise method plots all
-        s is the data, which will be simulated if not entered
-        assumes characteristic impedance is known/not changing - this can be changed """
+        assumes characteristic impedance is known/not changing - this can be changed
+            noise = noise added to s param data - default = 5E-6
+            index = s param that user wants (0-3) - default = 0
+            s = data, can be simulated or entered. """
     defaults = {"noise": None,
                 "s": None,
-                "index": None}
+                "index": None,
+                "fit_stats": None}
     plot_options = {}
     for key, value in defaults.iteritems():
         plot_options[key] = value
@@ -730,6 +727,10 @@ def simple_plot(model, **options):
         index = plot_options['index']
     else:
         index = 0
+    if plot_options['fit_stats']:
+        fit_stats = plot_options['fit_stats']
+    else:
+        fit_stats = False
     if plot_options['noise']:
         noise = plot_options['noise']
     else:
@@ -789,18 +790,9 @@ def simple_plot(model, **options):
         print 'Model must be type ShortModel or OpenModel'
         return
 
-    if index == 1 or index == 2:
-        import random
-        for i in range(len(sim_s)):
-            sim_s[i] = sim_s[random.randint(280, 320)] * 0.92
-            if i >= 250:
-                sim_s[i] = sim_s[random.randint(0, 250)]
-
-    # print sim_s
-    # quit()
-
     mi = lmfit.minimize(residual, p, method="powell" if index % 3 == 0 else "leastsq")
-    # print(lmfit.fit_report(mi, show_correl=False))
+    if fit_stats:
+        print lmfit.fit_report(mi, show_correl=False)
     return [model.f, abs(sim_s), abs(residual(mi.params) + sim_s)]
 
 
@@ -809,19 +801,15 @@ def simple_plot(model, **options):
 
 # test_model_calc()
 # plot(OpenModel())
-# simple_plot(OpenModel(), index=1)
-
 
 # Test Plot
 # plot_params(ShortModel(complex=True), format="RI")
-# quit()
+simple_plot(ShortModel())
 
 # sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[0:2], use_unicode=False)
 # sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[2:], use_unicode=False)
 # quit()
 
-""" expand s12/s21, subs(I,0) - should have real component, figure out how to get real components out of root
-    unrelated - check https://lmfit.github.io/lmfit-py/intro.html """
 # m = ShortModel(complex=True)
 # l0, l1, l2 = sympy.symbols('l0 l1 l2')
 # L = sympy.symbols('L', real=True)
