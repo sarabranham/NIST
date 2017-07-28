@@ -126,17 +126,30 @@ class TwoPortModel(object):
             self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
 
     def set_freq(self, freq):
-        """ Sets the frequency of the model. """
+        """ Sets the frequency of the model.
+            <br/> <b> Ex: TwoPortModel.set_freq(np.linspace(18E9, 50E9, 100)) </b>"""
         self.f = freq
+        if type(self) == OpenModel and not self.complex:
+            self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
+        elif type(self) == OpenModel and self.complex:
+            self.z = [complex(1/(2 * math.pi * (self.c0 + self.c1 * self.f[i] + self.c2 * self.f[i] ** 2)), 1)
+                      for i in range(len(self.f))]
+        if type(self) == ShortModel and not self.complex:
+            self.z = [2 * math.pi * self.f[j] * self.l for j in range(len(self.f))]
+        elif type(self) == ShortModel and self.complex:
+            self.z = [complex(2 * math.pi * (self.l0 + self.l1 * self.f[i] + self.l2 * self.f[i] ** 2), 1)
+                      for i in range(len(self.f))]
 
     def get_eqns(self):
         """ Uses sympy.pprint to display the equations in a nice format for the console.
-            <br/> Constraint - self.equation_list MUST BE sympy matrix or other sympy format. """
+            <br/> Constraint - self.equation_list MUST BE sympy matrix or other sympy format.
+            <br/> <b> Ex: TwoPortModel().get_eqns() </b>"""
         sympy.init_printing()
         sympy.pprint(self.equation_list, use_unicode=False)
 
     def calc_s(self, z):
-        """ Given an impedance, this calculates the s parameters for a load. """
+        """ Given an impedance, this calculates the s parameters for a load.
+            <br/> <b> Ex: TwoPortModel().calc_s(TwoPortModel().z)</b>"""
         s11 = (self.z0 - z) / (self.z0 + z)
         s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
         s22 = (z - self.z0) / (self.z0 + z)
@@ -145,7 +158,8 @@ class TwoPortModel(object):
 
     def data(self):
         """ Calculates S Params and returns the form [ [f1, s11, ... s22], [fn...] ]
-            <br/> Constraint - only goes to 8th dec, this can be changed in line 136 if needed. """
+            <br/> Constraint - only goes to 8th dec, this can be changed in line 136 if needed.
+            <br/> <b> Ex: TwoPortModel.data() </b>"""
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
             for p in self.calc_s(self.z):
@@ -153,7 +167,8 @@ class TwoPortModel(object):
         return a
 
     def s_params(self):
-        """ Formats S params to be [S11], [S12], [S21], [S11] - helpful for fitting. """
+        """ Formats S params to be [S11], [S12], [S21], [S11] - helpful for fitting.
+            <br/> <b> Ex: TwoPortModel().s_params() </b>"""
         s11 = []; s12 = []; s21 = []; s22 = []
         for list1 in self.data():
             for i in range(len(list1)):
@@ -192,7 +207,8 @@ class ReciprocalModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
 
     def calc_s(self, z):
-        """ Overloads superclass calculation, assumes s12 = s21 and s11^2 + s22^2 = 1. """
+        """ Overloads superclass calculation, assumes s12 = s21 and s11^2 + s22^2 = 1.
+            <br/> <b> Ex: ReciprocalModel().calc_s(ReciprocalModel().z[0])</b> """
         s11 = (self.z0 - z) / (self.z0 + z)
         s22 = math.sqrt(1 - s11**2)
         s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
@@ -271,7 +287,8 @@ class OpenModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_complex_coefs(self, c0, c1, c2):
-        """ Sets complex coefficients (c0, c1, c2) and recalculates impedance. """
+        """ Sets complex coefficients (c0, c1, c2) and recalculates impedance.
+            <br/> <b> Ex: OpenModel(complex=True).set_complex_coefs(1E-12, 1E-21, 1E-30) </b> """
         self.c0 = c0
         self.c1 = c1
         self.c2 = c2
@@ -279,13 +296,15 @@ class OpenModel(TwoPortModel):
                   for i in range(len(self.f))]
 
     def set_c(self, c):
-        """ Sets capacitance and recalculates impedance. """
+        """ Sets capacitance and recalculates impedance.
+            <br/> <b> Ex: OpenModel().set_c(0.0047) </b>"""
         self.c = c
         self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
 
     def set_complex(self, imag, **options):
         """ Sets whether or not the model is complex
-            <br/> Can be used to reassign c OR c0/c1/c2 and recalculate impedance, if not provided will use default. """
+            <br/> Can be used to reassign c OR c0/c1/c2 and recalculate impedance, if not provided will use default.
+            <br/> <b> Ex: OpenModel().set_complex(True) </b> """
         self.complex = imag
         complex_options = {}
         for key, value in options.iteritems():
@@ -302,7 +321,8 @@ class OpenModel(TwoPortModel):
                 self.set_c(0.000047)
 
     def complex_calc_s(self, z):
-        """ Calculates S Parameters given complex values - uses cmath. """
+        """ Calculates S Parameters given complex values - uses cmath.
+            <br/> <b> Ex: OpenModel(complex=True).complex_calc_s(OpenModel(complex=True).z[0]) </b> """
         s11 = complex(self.z0, -z) / complex(self.z0, z)
         s21 = cmath.sqrt(self.z0/complex(0, z)) * (1 - np.absolute(s11))
         s22 = complex(-self.z0, z) / complex(self.z0, z)
@@ -310,7 +330,8 @@ class OpenModel(TwoPortModel):
         return s11, s12, s21, s22
 
     def data(self):
-        """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True. """
+        """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True.
+            <br/> <b> Ex: OpenModel(complex=True).data() </b>"""
         a = [[self.f[i]] for i in range(len(self.f))]
         if not self.complex:
             for j in range(len(a)):
@@ -396,7 +417,8 @@ class ShortModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
     def set_complex_coefs(self, l0, l1, l2):
-        """ Sets complex coefficients (l0, l1, l2) and recalculates impedance. """
+        """ Sets complex coefficients (l0, l1, l2) and recalculates impedance.
+            <br/> <b> Ex: ShortModel(complex=True).set_complex_coefs(1E-12, 1E-21, 1E-30) </b>"""
         self.l0 = l0
         self.l1 = l1
         self.l2 = l2
@@ -404,13 +426,15 @@ class ShortModel(TwoPortModel):
                   i in range(len(self.f))]
 
     def set_l(self, l):
-        """ Sets inductance and recalculates impedance. """
+        """ Sets inductance and recalculates impedance.
+            <br/> <b> Ex: ShortModel().set_l(0.00091) </b>"""
         self.l = l
         self.z = [2 * math.pi * self.f[j] * self.l for j in range(len(self.f))]
 
     def set_complex(self, imag, **options):
         """ Sets whether or not the model is complex
-            <br/> Can be used to reassign l OR l0/l1/l2 and recalculate impedance, if not provided will use default. """
+            <br/> Can be used to reassign l OR l0/l1/l2 and recalculate impedance, if not provided will use default.
+            <br/> <b> Ex: ShortModel().set_complex(True) </b>"""
         self.complex = imag
         complex_options = {}
         for key, value in options.iteritems():
@@ -427,7 +451,8 @@ class ShortModel(TwoPortModel):
                 self.set_l(0.000910)
 
     def complex_calc_s(self, z):
-        """ Calculates S Parameters given complex values - uses cmath. """
+        """ Calculates S Parameters given complex values - uses cmath.
+            <br/> <b> Ex: ShortModel(complex=True).complex_calc_s(ShortModel(complex=True).z[0]) </b>"""
         s11 = complex(self.z0, -z) / complex(self.z0, z)
         s21 = cmath.sqrt(self.z0/complex(0, z)) * (1 - np.absolute(s11))
         s22 = complex(-self.z0, z) / complex(self.z0, z)
@@ -435,7 +460,8 @@ class ShortModel(TwoPortModel):
         return s11, s12, s21, s22
 
     def data(self):
-        """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True. """
+        """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True.
+            <br/> <b> Ex: ShortModel().data() </b>"""
         a = [[self.f[i]] for i in range(len(self.f))]
         if not self.complex:
             for j in range(len(a)):
@@ -453,7 +479,8 @@ class ShortModel(TwoPortModel):
 
 
 def test_model_calc():
-    """ Prints the calculations of all models. """
+    """ Prints the calculations of all models.
+        <br/> <b> Ex: test_model_calc() </b>"""
     # Short/Open: vals for s11, s22; others = 0, Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
     # Load/Reciprocal: get: s11 = 0, s12 = 1, s21 = 1, s22 = 0
     freq = np.linspace(1e8, 18e9, 10)
@@ -631,14 +658,16 @@ def plot_params(model_type, **options):
 
 
 def calc_phase(a):
-    """ Calculates the phase for a given array a[ ]. """
+    """ Calculates the phase for a given array a[ ].
+        <br/> <b> Ex: calc_phase(OpenModel(complex=True).s_params()[0])</b>"""
     p = []
     [p.append(sympy.arg(i)) for i in a]
     return p
 
 
 def calc_mag(a):
-    """ Calculates the magnitude/real component for a given array a[ ]. """
+    """ Calculates the magnitude/real component for a given array a[ ].
+        <br/> <b> Ex: calc_mag(OpenModel(complex=True).s_params()[0]) </b>"""
     m = []
     [m.append(sympy.Abs(i)) for i in a]
     return m
@@ -646,7 +675,8 @@ def calc_mag(a):
 
 def separate_imag(eqn, model_type):
     """ Separates the real and imaginary components of symbolic equations.
-        <br/> Needs - sympy equation, string model type ('short', 'open', etc.)"""
+        <br/> Needs - sympy equation, string model type ('short', 'open', etc.)
+        <br/> <b> Ex: separate_imag(OpenModel(complex=true).equation_list[0], 'open') </b>"""
     # TODO - this doesn't really work for S12/S21
     from sympy import symbols, expand, simplify, conjugate, denom, I
     l0, l1, l2, c0, c1, c2, x = symbols('l0 l1 l2 c0 c1 c2 x')
@@ -664,7 +694,7 @@ def separate_imag(eqn, model_type):
 def plot(model, **options):
     """ Will plot any model using helper methods (in theory), can use keyword args to specify noise, data, or number of
         graphs. Currently works for non-complex open and short models.
-        <br/> <b>Ex: plot(OpenModel(), noise=9E-4)</b>
+        <br/> <b> Ex: plot(OpenModel(), noise=9E-4, index=1)</b>
         <br/> <h3> Default Vals: </h3>
         <ul>
             <li> noise = 1E-5 </li>
@@ -740,14 +770,13 @@ def plot(model, **options):
 def simple_plot(model, **options):
     """ This plots and fits simple versions of short/open/load s parameters
         assumes characteristic impedance is known/not changing - this can be changed
-        <figure>
-            <figcaption> Default Vals: </figcaption>
+        <br/> <b> Ex: simple_plot(OpenModel(), noise=0.004, index=0) </b>
+        <h3> Default Vals: </h3>
             <ul>
                 <li> noise = noise added to s param data, 5E-6 </li>
                 <li> index = s param that user wants (0-3), 0 </li>
                 <li> s = data, simulated  </li>
-            </ul>
-        </figure>"""
+            </ul> """
     defaults = {"noise": None,
                 "s": None,
                 "index": None,

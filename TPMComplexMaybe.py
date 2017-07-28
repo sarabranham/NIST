@@ -282,17 +282,11 @@ class OpenModel(TwoPortModel):
 # Experimental Class
 
 
-def short_equation(f, z_0, l_0_real, l_0_imag, l_1_real, l_1_imag):
-    l_0 = l_0_real + 1j*2*math.pi*l_0_imag
-    l_1 = (l_1_real + 1j*2*math.pi*l_1_imag)
-    # l_2 = (l_2_real + 1j*2*math.pi*l_2_imag)
-    return (z_0 - (l_0 + l_1*f + 1E-9*f**2)) / (z_0 + (l_0 + 1E-9*f + 1E-9*f**2))
-
-
-def linear_resonator(f, f_0, Q, Q_e_real, Q_e_imag):
-    print 'f', f, '\nf0', f_0, 'q', Q, 'q.real', Q_e_real, 'q.imag', Q_e_imag
-    Q_e = Q_e_real + 1j*Q_e_imag
-    return 1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0))
+def short_equation(f, z0, l0_real, l0_imag, l1_real, l1_imag, l2_real, l2_imag):
+    l0 = l0_real + 1j*2*math.pi*l0_imag
+    l1 = (l1_real + 1j*2*math.pi*l1_imag)
+    l2 = (l2_real + 1j*2*math.pi*l2_imag)
+    return (z0 - (l0 + l1*f + l2*f**2)) / (z0 + (l0 + l1*f + l2*f**2))
 
 dict().pop('verbose', None)
 
@@ -315,12 +309,8 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
         for key, value in options.iteritems():
             self.plot_options[key] = value
 
-        # Initialize Plot Route
-        # pass in the defining equation so the user doesn't have to later.
-        # lmfit.model.Model.__init__(self, linear_resonator, **options)
-        # self.set_param_hint('Q', min=0)
         lmfit.model.Model.__init__(self, short_equation, **options)
-        self.set_param_hint('z_0', min=0)
+        self.set_param_hint('z0', value=50, max=100, min=5)
 
         # Initialize Math Route
         TwoPortModel.__init__(self, **self.plot_options)
@@ -358,9 +348,9 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
                     self.z = [complex(2 * math.pi * (self.l0 + self.l1 * self.f[i] + self.l2 * self.f[i] ** 2), 1) for
                               i in range(len(self.f))]
                 except KeyError:
-                    self.l0 = 1E-9
-                    self.l1 = 1E-9
-                    self.l2 = 1E-9
+                    self.l0 = 1E-12
+                    self.l1 = 1E-21
+                    self.l2 = 1E-30
                     self.z = [complex(2*math.pi*(self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2), 1) for
                               i in range(len(self.f))]
                     print "Default parameter input l0=l1=l2=" + str(self.l0)
@@ -422,85 +412,35 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
                     a[j].append(p)
             return a
 
-    # Deal with Plotting
-    # z = z_real + 1j * 2 * math.pi * (l_0 + l_1 * f + l_2 * f ** 2) return (z_0 - z) / (z_0 + z)
-    # assume: 40 < z0 < 50,
-    # Q_e = Q_e_real + 1j*Q_e_imag return (1 - (Q * Q_e**-1 / (1 + 2j * Q * (f - f_0) / f_0)))
-
-    # Guess from LMFIT
-    def guess(self, data, f=None, **options):
-        verbose = options.pop('verbose', None)
-        if f is None:
-            return
-        # find the minimum value/where for s21
-        argmin_s21 = np.abs(data).argmin()
-        fmin = f.min()
-        fmax = f.max()
-        # guess that the resonance is the lowest point
-        f_0_guess = f[argmin_s21]
-        # assume full curve
-        Q_min = 0.1 * (f_0_guess / (fmax - fmin))
-        # assume f is sorted
-        delta_f = np.diff(f)
-        min_delta_f = delta_f[delta_f > 0].min()
-        # assume data actually samples the resonance reasonably
-        Q_max = f_0_guess / min_delta_f
-        # geometric mean
-        Q_guess = np.sqrt(Q_min * Q_max)
-        Q_e_real_guess = Q_guess / (1 - np.abs(data[argmin_s21]))
-        if verbose:
-            print "fmin=", fmin, "fmax=", fmax, "f_0_guess=", f_0_guess
-            print "Qmin=", Q_min, "Q_max=", Q_max, "Q_guess=", Q_guess, "Q_e_real_guess=", Q_e_real_guess
-        params = self.make_params(Q=Q_guess, Q_e_real=Q_e_real_guess, Q_e_imag=0, f_0=f_0_guess)
-        params['%sQ' % self.prefix].set(min=Q_min, max=Q_max)
-        params['%sf_0' % self.prefix].set(min=fmin, max=fmax)
-        return lmfit.models.update_param_vals(params, self.prefix, **options)
-
     # New Guess
+    # z0_min = f.max() / (f.max() - f.min())
+    # z0_max = f.max() / min_delta_f
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
             return
         argmin_s11 = np.abs(data).argmin()
-        fmin = f.min()
-        fmax = f.max()
-        f_0_guess = f[argmin_s11]
+        f0_guess = f[argmin_s11]
         delta_f = np.diff(f)
         min_delta_f = delta_f[delta_f > 0].min()
-        z_0_min = 0.1 * (f_0_guess / (fmax - fmin))
-        z_0_max = f_0_guess / min_delta_f
-        z_0_guess = np.sqrt(z_0_min * z_0_max)
-        l_0_imag_guess = (1 - abs(data[argmin_s11])) / z_0_guess
-        print "product: ", l_0_imag_guess/f_0_guess**2
-        l_1_imag_guess = l_0_imag_guess / f_0_guess
-        # quit()
-        # l0_real_guess = z_0_guess / (1 - np.abs(data[argmin_s11]))
-        # print l0_real_guess
+        # z0_min = 0.1 * (f0_guess / (f.max() - f.min()))
+        # z0_max = f0_guess / min_delta_f
+        z0_min = f.max() / (f.max() - f.min())
+        z0_max = f.max() / min_delta_f
+        z0_guess = np.sqrt(z0_min * z0_max)
+        l0_imag_guess = (1 - abs(data[argmin_s11])) / z0_guess
+        l1_imag_guess = l0_imag_guess / f0_guess
+        l2_imag_guess = l0_imag_guess / f0_guess**2
         if verbose:
-            print "fmin=", fmin, "fmax=", fmax, "f_0_guess=", f_0_guess
-            print "Z_0_min=", z_0_min, "Z_0_max=", z_0_max, "Z_0_guess=", z_0_guess, "l_0_imag_guess=", l_0_imag_guess
-        # params = self.make_params(z_0=z_0_guess, l_0_real=l0_real_guess, l_0_imag=0, f=f_0_guess)
-        params = self.make_params(z_0=z_0_guess, l_0_real=0, l_0_imag=l_0_imag_guess, l_1_real=0,
-                                  l_1_imag=l_1_imag_guess, f=f_0_guess)
-        # params['%sz_0' % self.prefix].set(min=z_0_min, max=z_0_max)
-        # params['%sf' % self.prefix].set(min=fmin, max=fmax)
+            print "fmin=", f.min(), "fmax=", f.max(), "f0_guess=", f0_guess
+            print "z0_min=", z0_min, "z0_max=", z0_max, "z0_guess=", z0_guess, "l0_imag_guess=", l0_imag_guess
+        params = self.make_params(z0=z0_guess, l0_real=l0_imag_guess, l0_imag=l0_imag_guess, l1_real=l1_imag_guess,
+                                  l1_imag=l1_imag_guess, l2_real=l2_imag_guess, l2_imag=l2_imag_guess, f=f0_guess)
         return lmfit.models.update_param_vals(params, self.prefix, **options)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Module Scripts
-
-
-def test_model_calc():
-    """ Prints the calculations of all models. """
-    # Short/Open: vals for s11, s22; others = 0, Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
-    # Load/Reciprocal: get: s11 = 0, s12 = 1, s21 = 1, s22 = 0
-    freq = np.linspace(1e8, 18e9, 10)
-    print "Simple TwoPort: ", TwoPortModel(frequency=freq).data()
-    print "\nOpen: ", OpenModel(frequency=freq).data()
-    print "Open Complex: ", OpenModel(frequency=freq, complex=True).data()
-    print "\nShort: ", ShortModel(frequency=freq).data()
-    print "Short Complex: ", ShortModel(frequency=freq, complex=True).data()
 
 
 def calc_phase(a):
@@ -515,6 +455,23 @@ def calc_mag(a):
     m = []
     [m.append(sympy.Abs(i)) for i in a]
     return m
+
+
+def test_complex_fit(data, result):
+    r_error = []; i_error = []
+    for i in range(len(data)):
+        real_num = result.params['z0'].value**2 - 4*math.pi**2*(result.params['l0_real'].value +
+                                                                result.params['l1_real'].value * freq[i] +
+                                                                result.params['l2_real'].value * freq[i]**2)
+        denom = result.params['z0'].value**2 + 4*math.pi**2*(result.params['l0_real'].value +
+                                                             result.params['l1_real'].value * freq[0] +
+                                                             result.params['l2_real'].value * freq[0]**2)
+        imag_num = -4*math.pi*result.params['z0'].value * (result.params['l0_imag'].value +
+                                                           result.params['l1_imag'].value * freq[0] +
+                                                           result.params['l2_imag'].value * freq[0]**2)
+        r_error.append(abs(abs(real_num / denom) - abs(data[i].real)))
+        i_error.append(abs(abs(imag_num / denom) - abs(data[i].imag)))
+    return ["real error: ", np.average(r_error), "imag error: ", np.average(i_error)]
 
 
 def separate_imag(eqn, model_type):
@@ -665,44 +622,57 @@ def simple_plot(model, **options):
     return [model.f, abs(sim_s), abs(residual(mi.params) + sim_s)]
 
 
-def plot_ri(data, *args, **kwargs):
-    """ Plots the imaginary vs. real magnitudes of a data set"""
-    plt.plot(data.real, data.imag, *args, **kwargs)
+def plot_ri(frequency, fit_val, actual_val):
+    # TODO turn these into kwargs
+    plt.figure(1)
+    plt.subplot(211)
+    plt.plot(frequency, actual_val.imag, 'b.-', label='true')
+    plt.plot(frequency, fit_val.imag, 'r.-', label='fit')
+    plt.subplot(212)
+    plt.plot(frequency, actual_val.real, 'b.-', label='true')
+    plt.plot(frequency, fit_val.real, 'r.-', label='fit')
+    plt.xlabel('Freq [MHz]')
+    plt.ylabel('Mag')
+    plt.tight_layout()
+    plt.show()
 
+
+def plot_complex(frequency, fit_val, actual_val, measured_val):
+    # TODO: turn these into kwargs
+    plt.plot(frequency/10**10, 20*np.log10(np.abs(actual_val)), 'r.-', label='true')
+    plt.plot(frequency/10**10, 20*np.log10(np.abs(fit_val)), 'b.-', label='fit')
+    plt.plot(frequency/10**10, 20*np.log10(np.abs(measured_val)), 'k.', label='measured', markersize=2)
+    plt.ticklabel_format(axis='y', style='')
+    plt.ylabel('|S11| (dB)')
+    plt.xlabel('MHz')
+    plt.legend(bbox_to_anchor=(0.8, 1), loc=2, borderaxespad=0.)
+    plt.show()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Runner
 
 short = ShortModel(complex=True)
-true_params = short.make_params(z_0=short.z0, l_0_real=0, l_0_imag=short.l0, l_1_real=0, l_1_imag=short.l1, f_0=100)
-freq = np.linspace(17E9, 18E9, 100)
-noise_scale = 3E-10
+true_params = short.make_params(z0=short.z0, l0_real=short.l0, l0_imag=short.l0, l1_real=short.l1, l1_imag=short.l1,
+                                l2_real=short.l2, l2_imag=short.l2, f=short.f[0])
+freq = np.linspace(10E9, 50E9, 800)
+noise_scale = 1E-11
 true_s11 = short.eval(params=true_params, f=freq)
 
 # complex noise
 measured_s11 = true_s11 + noise_scale*(np.random.randn(len(freq)) + 1j*np.random.randn(len(freq)))
 
-guess = short.guess(measured_s11, f=freq, verbose=False)
-result = short.fit(measured_s11, params=guess, f=freq, verbose=False)
-print result.fit_report()
+guess = short.guess(measured_s11, f=freq, verbose=True)
+result = short.fit(measured_s11, params=guess, f=freq, method='cd')
+# print result.fit_report()
+# print(test_complex_fit(true_s11, result))
 # btw real vals - http://na.support.keysight.com/pna/caldefs/stddefs.html
-quit()
 
 fit_s11 = short.eval(params=result.params, f=freq)
-guess_s11 = short.eval(params=guess, f=freq)
-plt.plot(freq/10**10, 20*np.log10(np.abs(true_s11)), 'r.-', label='true values')
-plt.plot(freq/10**10, 20*np.log10(np.abs(fit_s11)), 'b.-', label='fit')
-plt.plot(freq/10**10, 20*np.log10(np.abs(measured_s11)), 'k--', label='measured')
-plt.ticklabel_format(axis='y', style='')
-plt.ylabel('|S11| (dB)')
-plt.xlabel('MHz')
-plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-# plt.show()
+plot_complex(freq, fit_s11, true_s11, measured_s11)
+plot_ri(freq, fit_s11, true_s11)
 
-# plot_ri(measured_s11, '.')
-plot_ri(true_s11)
-# plot_ri(fit_s11, 'r.-')
-# plot_ri(guess_s11, 'k--')
-plt.xlabel('Re(S11)')
-plt.ylabel('Im(S11)')
-# plt.show()
+
+
+
+
+
