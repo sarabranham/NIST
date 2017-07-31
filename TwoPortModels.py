@@ -39,42 +39,40 @@ Help
 # ----------------------------------------------------------------------------------------------------------------------
 # Standard Imports
 import sys
-sys.path.append(r"C:\ProgramData\Anaconda2\Lib\site-packages\pyMeasure")
-from Code.Analysis.Fitting import *
+import math
+import cmath
 import re
+import markdown
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Third Party Imports
+
+# Importing Fitting, instead of all of PyMeasure
+sys.path.append(r"C:\ProgramData\Anaconda2\Lib\site-packages\pyMeasure")
 try:
-    import math
+    from Code.Analysis.Fitting import *
 except:
-    print("The module math either was not found or has an error")
-    raise
+    print("The module PyMeasure.fitting either was not found or has an error.")
 try:
     import lmfit
 except:
-    print("The module lmfit either was not found or has an error")
+    print("The module lmfit either was not found or has an error.")
     raise
 try:
     import numpy as np
 except:
-    print("The module numpy either was not found or has an error")
+    print("The module numpy either was not found or has an error.")
     raise
 try:
     import sympy as sympy
     from sympy.abc import f, F, c, C, zeta, l, s, Z
 except:
-    print("The module sympy either was not found or has an error")
+    print("The module sympy either was not found or has an error.")
     raise
 try:
     import matplotlib.pyplot as plt
 except:
-    print("The module matplotlib.pyplot was not found or has an error")
-    raise
-try:
-    import cmath
-except:
-    print("The module cmath either was not found or has an error")
+    print("The module matplotlib.pyplot was not found or has an error.")
     raise
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -85,13 +83,14 @@ class TwoPortModel(object):
     """ TwoPortModel is a class that models a standard load circuit. It uses sympy to provide both symbolic and numeric
         manipulation of equations. Initialize the class with a frequency, resistance, and characteristic impedance.
         <br/> Note: Does not include complex functionality.
-        <br/> <b> Ex: TwoPortModel(frequency=[100, 200, 300], impedance=50, characteristic_impedance=50) </b>
+        <br/> **Ex: TwoPortModel(frequency=[100, 200, 300], impedance=50, characteristic_impedance=50)**
         <br/> Any parameters not included in the instantiation will be assigned a value
         <br/> <h3> Default Vals: </h3>
         <ul>
             <li>frequency = np.linspace(1e8, 18e9, 500)</li>
             <li>impedance/char. impedance = 50.</li>
         </ul> """
+
     def __init__(self, **options):
         defaults = {"frequency": None,
                     "impedance": None,
@@ -115,19 +114,18 @@ class TwoPortModel(object):
             self.z0 = self.plot_options["characteristic_impedance"]
         else:
             self.z0 = 50.
-        # TODO - add length functionality for waveguides
         if self.plot_options["length"]:
             self.len = self.plot_options["length"]
 
-        self.equation_list = sympy.Matrix(np.array([[(Z - zeta)/(Z + zeta), sympy.sqrt(Z/zeta)*(1-abs(s))],
-                                                    [sympy.sqrt(Z/zeta)*(1 - abs(s)), (zeta - Z)/(Z + zeta)]]))
+        self.equation_list = sympy.Matrix(np.array([[(Z - zeta) / (Z + zeta), sympy.sqrt(Z / zeta) * (1 - abs(s))],
+                                                    [sympy.sqrt(Z / zeta) * (1 - abs(s)), (zeta - Z) / (Z + zeta)]]))
         for i in range(len(self.equation_list)):
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
             self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
 
-    def set_freq(self, freq):
+    def set_frequency(self, freq):
         """ Sets the frequency of the model.
-            <br/> <b> Ex: TwoPortModel.set_freq(np.linspace(18E9, 50E9, 100)) </b>"""
+            <br/> **Ex: TwoPortModel.set_frequency(np.linspace(18E9, 50E9, 100))**"""
         self.f = freq
         if type(self) == OpenModel and not self.complex:
             self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
@@ -140,16 +138,16 @@ class TwoPortModel(object):
             self.z = [complex(2 * math.pi * (self.l0 + self.l1 * self.f[i] + self.l2 * self.f[i] ** 2), 1)
                       for i in range(len(self.f))]
 
-    def get_eqns(self):
+    def get_equations(self):
         """ Uses sympy.pprint to display the equations in a nice format for the console.
             <br/> Constraint - self.equation_list MUST BE sympy matrix or other sympy format.
-            <br/> <b> Ex: TwoPortModel().get_eqns() </b>"""
+            <br/> **Ex: TwoPortModel().get_equations()**"""
         sympy.init_printing()
         sympy.pprint(self.equation_list, use_unicode=False)
 
     def calc_s(self, z):
         """ Given an impedance, this calculates the s parameters for a load.
-            <br/> <b> Ex: TwoPortModel().calc_s(TwoPortModel().z)</b>"""
+            <br/> **Ex: TwoPortModel().calc_s(TwoPortModel().z**"""
         s11 = (self.z0 - z) / (self.z0 + z)
         s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
         s22 = (z - self.z0) / (self.z0 + z)
@@ -159,16 +157,16 @@ class TwoPortModel(object):
     def data(self):
         """ Calculates S Params and returns the form [ [f1, s11, ... s22], [fn...] ]
             <br/> Constraint - only goes to 8th dec, this can be changed in line 136 if needed.
-            <br/> <b> Ex: TwoPortModel.data() </b>"""
+            <br/> **Ex: TwoPortModel.data()**"""
         a = [[self.f[i]] for i in range(len(self.f))]
         for j in range(len(a)):
             for p in self.calc_s(self.z):
                 a[j].append(float("{0:.8f}".format(p)))
         return a
 
-    def s_params(self):
+    def s_parameters(self):
         """ Formats S params to be [S11], [S12], [S21], [S11] - helpful for fitting.
-            <br/> <b> Ex: TwoPortModel().s_params() </b>"""
+            <br/> **Ex: TwoPortModel().s_parameters()**"""
         s11 = []; s12 = []; s21 = []; s22 = []
         for list1 in self.data():
             for i in range(len(list1)):
@@ -188,7 +186,7 @@ class TwoPortModel(object):
 class ReciprocalModel(TwoPortModel):
     """ Reciprocal Model extends TwoPortModel, it assumes s21 = s12 and s11^2 + s22^2 = 1
         <br/> Does not include complex functionality.
-        <br/> <b> Ex: ReciprocalModel(frequency=[100, 200, 300], impedance=50, characteristic_impedance=50). </b> """
+        <br/> **Ex: ReciprocalModel(frequency=[100, 200, 300], impedance=50, characteristic_impedance=50).** """
     def __init__(self, **options):
         defaults = {"frequency": None,
                     "impedance": None,
@@ -208,7 +206,7 @@ class ReciprocalModel(TwoPortModel):
 
     def calc_s(self, z):
         """ Overloads superclass calculation, assumes s12 = s21 and s11^2 + s22^2 = 1.
-            <br/> <b> Ex: ReciprocalModel().calc_s(ReciprocalModel().z[0])</b> """
+            <br/> **Ex: ReciprocalModel().calc_s(ReciprocalModel().z[0]** """
         s11 = (self.z0 - z) / (self.z0 + z)
         s22 = math.sqrt(1 - s11**2)
         s21 = math.sqrt(self.z0/z) * (1 - math.fabs(s11))
@@ -220,7 +218,7 @@ class ReciprocalModel(TwoPortModel):
 
 class OpenModel(TwoPortModel):
     """ OpenModel extends TwoPortModel, however offers complex calculations and substitutes equations for impedance.
-        <br/> <b> Ex: OpenModel(frequency=[100,200,300], capacitance=4.7E-5, complex=True) </b>
+        <br/> **Ex: OpenModel(frequency=[100,200,300], capacitance=4.7E-5, complex=True)**
         <br/> <h3> Default Vals: </h3>
         <ul>
             <li> frequency = np.linspace(1e8, 18e9, 500) </li>
@@ -286,9 +284,9 @@ class OpenModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(zeta, z_c)
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
-    def set_complex_coefs(self, c0, c1, c2):
+    def set_complex_coefficients(self, c0, c1, c2):
         """ Sets complex coefficients (c0, c1, c2) and recalculates impedance.
-            <br/> <b> Ex: OpenModel(complex=True).set_complex_coefs(1E-12, 1E-21, 1E-30) </b> """
+            <br/> **Ex: OpenModel(complex=True).set_complex_coefficients(1E-12, 1E-21, 1E-30)** """
         self.c0 = c0
         self.c1 = c1
         self.c2 = c2
@@ -297,23 +295,23 @@ class OpenModel(TwoPortModel):
 
     def set_c(self, c):
         """ Sets capacitance and recalculates impedance.
-            <br/> <b> Ex: OpenModel().set_c(0.0047) </b>"""
+            <br/> **Ex: OpenModel().set_c(0.0047)**"""
         self.c = c
         self.z = [1 / (2 * math.pi * self.f[i] * self.c) for i in range(len(self.f))]
 
     def set_complex(self, imag, **options):
         """ Sets whether or not the model is complex
             <br/> Can be used to reassign c OR c0/c1/c2 and recalculate impedance, if not provided will use default.
-            <br/> <b> Ex: OpenModel().set_complex(True) </b> """
+            <br/> **Ex: OpenModel().set_complex(True)** """
         self.complex = imag
         complex_options = {}
         for key, value in options.iteritems():
             complex_options[key] = value
         if self.complex:
             if complex_options['c0'] and complex_options['c1'] and complex_options['c2']:
-                self.set_complex_coefs(complex_options['c0'], complex_options['c1'], complex_options['c2'])
+                self.set_complex_coefficients(complex_options['c0'], complex_options['c1'], complex_options['c2'])
             else:
-                self.set_complex_coefs(1E-12, 1E-12, 1E-12)
+                self.set_complex_coefficients(1E-12, 1E-12, 1E-12)
         else:
             if complex_options['c']:
                 self.set_c(complex_options['c'])
@@ -322,7 +320,7 @@ class OpenModel(TwoPortModel):
 
     def complex_calc_s(self, z):
         """ Calculates S Parameters given complex values - uses cmath.
-            <br/> <b> Ex: OpenModel(complex=True).complex_calc_s(OpenModel(complex=True).z[0]) </b> """
+            <br/> **Ex: OpenModel(complex=True).complex_calc_s(OpenModel(complex=True).z[0])** """
         s11 = complex(self.z0, -z) / complex(self.z0, z)
         s21 = cmath.sqrt(self.z0/complex(0, z)) * (1 - np.absolute(s11))
         s22 = complex(-self.z0, z) / complex(self.z0, z)
@@ -331,7 +329,7 @@ class OpenModel(TwoPortModel):
 
     def data(self):
         """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True.
-            <br/> <b> Ex: OpenModel(complex=True).data() </b>"""
+            <br/> **Ex: OpenModel(complex=True).data()**"""
         a = [[self.f[i]] for i in range(len(self.f))]
         if not self.complex:
             for j in range(len(a)):
@@ -349,7 +347,7 @@ class OpenModel(TwoPortModel):
 
 class ShortModel(TwoPortModel):
     """ ShortModel extends TwoPortModel, however offers complex calculations and substitutes equations for impedance.
-        <br/> <b> Ex: ShortModel(frequency=[100,200,300], inductance=0.00091, impedance=50, complex=True) </b>
+        <br/> **Ex: ShortModel(frequency=[100,200,300], inductance=0.00091, impedance=50, complex=True)**
         <br/> <h3> Default Vals: </h3>
         <ul> <li> frequency = np.linspace(1e8, 18e9, 500) </li>
             <li> impedance/char. impedance = 50 </li>
@@ -357,6 +355,7 @@ class ShortModel(TwoPortModel):
             <li> l0=l1=l2 = 1E-9 </li>
             <li> complex = False </li>
         </ul> """
+
     def __init__(self, **options):
         defaults = {"frequency": None,
                     "inductance": None,
@@ -408,7 +407,7 @@ class ShortModel(TwoPortModel):
                     self.l0 = 1E-9
                     self.l1 = 1E-9
                     self.l2 = 1E-9
-                    self.z = [complex(2*math.pi*(self.l0 + self.l1*self.f[i] + self.l2*self.f[i]**2), 1) for
+                    self.z = [complex(2 * math.pi * (self.l0 + self.l1 * self.f[i] + self.l2 * self.f[i] ** 2), 1) for
                               i in range(len(self.f))]
                     print("Default parameter input l0=l1=l2=" + str(self.l0))
         for i in range(len(self.equation_list)):
@@ -416,9 +415,9 @@ class ShortModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(zeta, z_l).simplify()
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
-    def set_complex_coefs(self, l0, l1, l2):
+    def set_complex_coefficients(self, l0, l1, l2):
         """ Sets complex coefficients (l0, l1, l2) and recalculates impedance.
-            <br/> <b> Ex: ShortModel(complex=True).set_complex_coefs(1E-12, 1E-21, 1E-30) </b>"""
+            <br/> **Ex: ShortModel(complex=True).set_complex_coefficients(1E-12, 1E-21, 1E-30)**"""
         self.l0 = l0
         self.l1 = l1
         self.l2 = l2
@@ -427,23 +426,23 @@ class ShortModel(TwoPortModel):
 
     def set_l(self, l):
         """ Sets inductance and recalculates impedance.
-            <br/> <b> Ex: ShortModel().set_l(0.00091) </b>"""
+            <br/> **Ex: ShortModel().set_l(0.00091)**"""
         self.l = l
         self.z = [2 * math.pi * self.f[j] * self.l for j in range(len(self.f))]
 
     def set_complex(self, imag, **options):
         """ Sets whether or not the model is complex
             <br/> Can be used to reassign l OR l0/l1/l2 and recalculate impedance, if not provided will use default.
-            <br/> <b> Ex: ShortModel().set_complex(True) </b>"""
+            <br/> **Ex: ShortModel().set_complex(True)**"""
         self.complex = imag
         complex_options = {}
         for key, value in options.iteritems():
             complex_options[key] = value
         if self.complex:
             if complex_options['l0'] and complex_options['l1'] and complex_options['l2']:
-                self.set_complex_coefs(complex_options['l0'], complex_options['l1'], complex_options['l2'])
+                self.set_complex_coefficients(complex_options['l0'], complex_options['l1'], complex_options['l2'])
             else:
-                self.set_complex_coefs(1E-12, 1E-12, 1E-12)
+                self.set_complex_coefficients(1E-12, 1E-12, 1E-12)
         else:
             if complex_options['l']:
                 self.set_l(complex_options['l'])
@@ -452,7 +451,7 @@ class ShortModel(TwoPortModel):
 
     def complex_calc_s(self, z):
         """ Calculates S Parameters given complex values - uses cmath.
-            <br/> <b> Ex: ShortModel(complex=True).complex_calc_s(ShortModel(complex=True).z[0]) </b>"""
+            <br/> **Ex: ShortModel(complex=True).complex_calc_s(ShortModel(complex=True).z[0])**"""
         s11 = complex(self.z0, -z) / complex(self.z0, z)
         s21 = cmath.sqrt(self.z0/complex(0, z)) * (1 - np.absolute(s11))
         s22 = complex(-self.z0, z) / complex(self.z0, z)
@@ -461,7 +460,7 @@ class ShortModel(TwoPortModel):
 
     def data(self):
         """ Operates the same as TwoPortModel but offers complex functionality if self.complex=True.
-            <br/> <b> Ex: ShortModel().data() </b>"""
+            <br/> **Ex: ShortModel().data()**"""
         a = [[self.f[i]] for i in range(len(self.f))]
         if not self.complex:
             for j in range(len(a)):
@@ -480,7 +479,7 @@ class ShortModel(TwoPortModel):
 
 def test_model_calc():
     """ Prints the calculations of all models.
-        <br/> <b> Ex: test_model_calc() </b>"""
+        <br/> **Ex: test_model_calc()**"""
     # Short/Open: vals for s11, s22; others = 0, Get: s11 = -1/1, s12 = 0/0.009, s21 = 0/0.009, s22 = 1/-1
     # Load/Reciprocal: get: s11 = 0, s12 = 1, s21 = 1, s22 = 0
     freq = np.linspace(1e8, 18e9, 10)
@@ -492,16 +491,15 @@ def test_model_calc():
     print("Short Complex: ", ShortModel(frequency=freq, complex=True).data())
 
 
-# Fitting is not liking any of my eqns - but plotting totally works
-def plot_params(model_type, **options):
+def plot_parameters_script(model_type, **options):
     """ Plots a Model and solves for parameters using FunctionalModels (in Fitting), only works for non-complex models.
         Doesn't use simulated data, probably was supposed to?
-        <br/> <b>Ex: plot_params(OpenModel(), format='')</b>
+        <br/> **x: plot_parameters_script(OpenModel(), format=''**
         <br/> <h3> Format Options: </h3>
         <ul>
-            <li> RI = real imaginary vs. freq (plot_params(OpenModel(complex=True), format='ri'/'RI') </li>
-            <li> MP = magnitude phase vs. freq (plot_params(OpenModel(complex=True), format='mp'/'MP') </li>
-            <li> Default = s parameter vs. freq (plot_params(OpenModel(), format='') </li>
+            <li> RI = real imaginary vs. freq (plot_parameters_script(OpenModel(complex=True), format='ri'/'RI') </li>
+            <li> MP = magnitude phase vs. freq (plot_parameters_script(OpenModel(complex=True), format='mp'/'MP') </li>
+            <li> Default = s parameter vs. freq (plot_parameters_script(OpenModel(), format='') </li>
         </ul> """
     defaults = {"format": None}
     plot_options = {}
@@ -519,17 +517,17 @@ def plot_params(model_type, **options):
     # Complex Plots
     if model_type.complex:
         if type(model_type) == OpenModel:
-            s11_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[1])
-            s11_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s11.equation, 'open')[3])
-            s22_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[1])
-            s22_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imag(s22.equation, 'open')[3])
+            s11_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imaginary(s11.equation, 'open')[1])
+            s11_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imaginary(s11.equation, 'open')[3])
+            s22_real = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imaginary(s22.equation, 'open')[1])
+            s22_imag = FunctionalModel(parameters=['c0', 'c1', 'c2'], variables='f', equation=separate_imaginary(s22.equation, 'open')[3])
             # s12.parameters = ['c0', 'c1', 'c2']
             # s21.parameters = ['c0', 'c1', 'c2']
         else:
-            s11_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[1])
-            s11_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s11.equation, 'short')[3])
-            s22_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[1])
-            s22_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imag(s22.equation, 'short')[3])
+            s11_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imaginary(s11.equation, 'short')[1])
+            s11_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imaginary(s11.equation, 'short')[3])
+            s22_real = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imaginary(s22.equation, 'short')[1])
+            s22_imag = FunctionalModel(parameters=['l0', 'l1', 'l2'], variables='f', equation=separate_imaginary(s22.equation, 'short')[3])
             # s12.parameters = ['l0', 'l1', 'l2']
             # s21.parameters = ['l0', 'l1', 'l2']
 
@@ -548,16 +546,16 @@ def plot_params(model_type, **options):
 
     # Real/Imaginary Plot
     if re.search('ri', plot_options['format'], re.IGNORECASE) and model_type.complex:
-        s11_real.fit_data(model_type.f, model_type.s_params()[0].real,
+        s11_real.fit_data(model_type.f, model_type.s_parameters()[0].real,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s11_imag.fit_data(model_type.f, model_type.s_params()[0].imag,
+        s11_imag.fit_data(model_type.f, model_type.s_parameters()[0].imag,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s22_real.fit_data(model_type.f, model_type.s_params()[3].real,
+        s22_real.fit_data(model_type.f, model_type.s_parameters()[3].real,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
-        s22_imag.fit_data(model_type.f, model_type.s_params()[3].imag,
+        s22_imag.fit_data(model_type.f, model_type.s_parameters()[3].imag,
                           initial_guess={'l0': model_type.l0, 'l1': model_type.l1, 'l2': model_type.l2} if type(model_type) == ShortModel
                           else {'c0': model_type.c0, 'c1': model_type.c1, 'c2': model_type.c2})
 
@@ -566,53 +564,52 @@ def plot_params(model_type, **options):
 
         plt.figure(1)
         plt.subplot(211)
-        plt.plot(model_type.f, model_type.s_params()[0].real, label='s11')
-        plt.plot(model_type.f, model_type.s_params()[1].real, label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2].real, label='s21')
-        plt.plot(model_type.f, model_type.s_params()[3].real, label='s22')
+        plt.plot(model_type.f, model_type.s_parameters()[0].real, label='s11')
+        plt.plot(model_type.f, model_type.s_parameters()[1].real, label='s12')
+        plt.plot(model_type.f, model_type.s_parameters()[2].real, label='s21')
+        plt.plot(model_type.f, model_type.s_parameters()[3].real, label='s22')
         plt.ylabel("Real")
         plt.title("Real Component vs. Frequency")
 
         plt.subplot(212)
-        plt.plot(model_type.f, model_type.s_params()[0].imag, label='s11')
-        plt.plot(model_type.f, model_type.s_params()[1].imag, label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2].imag, label='s21')
-        plt.plot(model_type.f, model_type.s_params()[3].imag, label='s22')
+        plt.plot(model_type.f, model_type.s_parameters()[0].imag, label='s11')
+        plt.plot(model_type.f, model_type.s_parameters()[1].imag, label='s12')
+        plt.plot(model_type.f, model_type.s_parameters()[2].imag, label='s21')
+        plt.plot(model_type.f, model_type.s_parameters()[3].imag, label='s22')
         plt.ylabel('Imaginary')
         plt.title("Imaginary Component vs. Frequency")
         plt.tight_layout()
 
     # Magnitude/Phase Plot
     elif re.search('mp', plot_options['format'], re.IGNORECASE) and model_type.complex:
-        s11.fit_data(model_type.f, calc_mag(model_type.s_params()[0]))
-        s11.fit_data(model_type.f, calc_phase(model_type.s_params()[0]))
-        # s12.fit_data(model_type.f, calc_mag(model_type.s_params()[1]))
-        # s12.fit_data(model_type.f, calc_phase(model_type.s_params()[1]))
-        # s21.fit_data(model_type.f, calc_mag(model_type.s_params()[2]))
-        # s21.fit_data(model_type.f, calc_phase(model_type.s_params()[2]))
-        # s22.fit_data(model_type.f, calc_mag(model_type.s_params()[3]))
-        # s22.fit_data(model_type.f, calc_phase(model_type.s_params()[3]))
+        s11.fit_data(model_type.f, calc_magnitude(model_type.s_parameters()[0]))
+        s11.fit_data(model_type.f, calc_phase(model_type.s_parameters()[0]))
+        # s12.fit_data(model_type.f, calc_magnitude(model_type.s_parameters()[1]))
+        # s12.fit_data(model_type.f, calc_phase(model_type.s_parameters()[1]))
+        # s21.fit_data(model_type.f, calc_magnitude(model_type.s_parameters()[2]))
+        # s21.fit_data(model_type.f, calc_phase(model_type.s_parameters()[2]))
+        # s22.fit_data(model_type.f, calc_magnitude(model_type.s_parameters()[3]))
+        # s22.fit_data(model_type.f, calc_phase(model_type.s_parameters()[3]))
 
         plt.figure(1)
         plt.subplot(211)
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[0]), label='s11')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[1]), label='s12')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[2]), label='s21')
-        plt.plot(model_type.f, calc_mag(model_type.s_params()[3]), label='s22')
+        plt.plot(model_type.f, calc_magnitude(model_type.s_parameters()[0]), label='s11')
+        plt.plot(model_type.f, calc_magnitude(model_type.s_parameters()[1]), label='s12')
+        plt.plot(model_type.f, calc_magnitude(model_type.s_parameters()[2]), label='s21')
+        plt.plot(model_type.f, calc_magnitude(model_type.s_parameters()[3]), label='s22')
         plt.ylabel("Magnitude")
         plt.title("Magnitude vs. Frequency")
 
         plt.subplot(212)
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[0]), label='s11')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[1]), label='s12')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[2]), label='s21')
-        plt.plot(model_type.f, calc_phase(model_type.s_params()[3]), label='s22')
+        plt.plot(model_type.f, calc_phase(model_type.s_parameters()[0]), label='s11')
+        plt.plot(model_type.f, calc_phase(model_type.s_parameters()[1]), label='s12')
+        plt.plot(model_type.f, calc_phase(model_type.s_parameters()[2]), label='s21')
+        plt.plot(model_type.f, calc_phase(model_type.s_parameters()[3]), label='s22')
         plt.ylabel("Phase [rad]")
         plt.title("Phase vs. Frequency")
         plt.tight_layout()
 
     # Smith Plot
-    # TODO - figure out how smith plots work
     elif re.search('smith', plot_options['format'], re.IGNORECASE):
         # Do Smith Plot Stuff
         return
@@ -620,16 +617,16 @@ def plot_params(model_type, **options):
     # Parameter Frequency Plot
     else:
         if type(model_type) == OpenModel or type(model_type) == ShortModel:
-            s11.fit_data(model_type.f, model_type.s_params()[0], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
-            s22.fit_data(model_type.f, model_type.s_params()[3], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
+            s11.fit_data(model_type.f, model_type.s_parameters()[0], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
+            s12.fit_data(model_type.f, model_type.s_parameters()[1], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
+            s21.fit_data(model_type.f, model_type.s_parameters()[2], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
+            s22.fit_data(model_type.f, model_type.s_parameters()[3], initial_guess={'l': model_type.l} if type(model_type) == ShortModel else {'c': model_type.c})
         else:
             # Should these have a plot_fit if they aren't really dependent on f?
-            s11.fit_data(model_type.f, model_type.s_params()[0])
-            s12.fit_data(model_type.f, model_type.s_params()[1], initial_guess={'zeta': model_type.z0})
-            s21.fit_data(model_type.f, model_type.s_params()[2], initial_guess={'zeta': model_type.z0})
-            s22.fit_data(model_type.f, model_type.s_params()[3])
+            s11.fit_data(model_type.f, model_type.s_parameters()[0])
+            s12.fit_data(model_type.f, model_type.s_parameters()[1], initial_guess={'zeta': model_type.z0})
+            s21.fit_data(model_type.f, model_type.s_parameters()[2], initial_guess={'zeta': model_type.z0})
+            s22.fit_data(model_type.f, model_type.s_parameters()[3])
 
         print('s11:', s11.parameter_values)
         print('s12:', s12.parameter_values)
@@ -638,15 +635,15 @@ def plot_params(model_type, **options):
 
         plt.figure(1)
         plt.subplot(211)
-        plt.plot(model_type.f, model_type.s_params()[0], label='s11')
-        plt.plot(model_type.f, model_type.s_params()[3], label='s22')
+        plt.plot(model_type.f, model_type.s_parameters()[0], label='s11')
+        plt.plot(model_type.f, model_type.s_parameters()[3], label='s22')
         plt.ylabel('S Parameters')
         plt.title(str(type(model_type).__name__) + " S Parameters vs. Frequency")
         plt.legend()
 
         plt.subplot(212)
-        plt.plot(model_type.f, model_type.s_params()[1], label='s12')
-        plt.plot(model_type.f, model_type.s_params()[2], label='s21')
+        plt.plot(model_type.f, model_type.s_parameters()[1], label='s12')
+        plt.plot(model_type.f, model_type.s_parameters()[2], label='s21')
         plt.ylabel('S Parameters')
         plt.title(str(type(model_type).__name__) + " S Parameters vs. Frequency")
         plt.tight_layout()
@@ -659,24 +656,24 @@ def plot_params(model_type, **options):
 
 def calc_phase(a):
     """ Calculates the phase for a given array a[ ].
-        <br/> <b> Ex: calc_phase(OpenModel(complex=True).s_params()[0])</b>"""
+        <br/> **Ex: calc_phase(OpenModel(complex=True).s_parameters()[0]**"""
     p = []
     [p.append(sympy.arg(i)) for i in a]
     return p
 
 
-def calc_mag(a):
+def calc_magnitude(a):
     """ Calculates the magnitude/real component for a given array a[ ].
-        <br/> <b> Ex: calc_mag(OpenModel(complex=True).s_params()[0]) </b>"""
+        <br/> **Ex: calc_magnitude(OpenModel(complex=True).s_parameters()[0])**"""
     m = []
     [m.append(sympy.Abs(i)) for i in a]
     return m
 
 
-def separate_imag(eqn, model_type):
+def separate_imaginary(eqn, model_type):
     """ Separates the real and imaginary components of symbolic equations.
         <br/> Needs - sympy equation, string model type ('short', 'open', etc.)
-        <br/> <b> Ex: separate_imag(OpenModel(complex=true).equation_list[0], 'open') </b>"""
+        <br/> **Ex: separate_imaginary(OpenModel(complex=true).equation_list[0], 'open')**"""
     # TODO - this doesn't really work for S12/S21
     from sympy import symbols, expand, simplify, conjugate, denom, I
     l0, l1, l2, c0, c1, c2, x = symbols('l0 l1 l2 c0 c1 c2 x')
@@ -691,16 +688,17 @@ def separate_imag(eqn, model_type):
                      'imag', simplify(expand(eqn) - eqn.subs(sympy.I, 0)).subs(I, 1)])
 
 
-def plot(model, **options):
+def plot_s_parameters_script(model, **options):
     """ Will plot any model using helper methods (in theory), can use keyword args to specify noise, data, or number of
         graphs. Currently works for non-complex open and short models.
-        <br/> <b> Ex: plot(OpenModel(), noise=9E-4, index=1)</b>
-        <br/> <h3> Default Vals: </h3>
-        <ul>
+        <br/> **Ex: plot_s_parameters_script(OpenModel(), noise=9E-4, index=1)**
+        <br/> <h3>Default Vals:</h3>
+            <ul>
             <li> noise = 1E-5 </li>
             <li> index = all (plots 4 graphs) </li>
-            <li> s = simulated data  </li>
-        </ul> """
+            <li> s = data, simulated  </li>
+            </ul>
+        """
     defaults = {"noise": None,
                 "s": None,
                 "index": None}
@@ -710,8 +708,7 @@ def plot(model, **options):
         plot_options[key] = value
     for key, value in options.iteritems():
         plot_options[key] = value
-    # TODO - fix not catching if index = 0
-    if plot_options['index']:
+    if isinstance(plot_options['index'], int):
         all_plots = False
         index = plot_options['index']
 
@@ -725,23 +722,23 @@ def plot(model, **options):
 
     if all_plots:
         fig, axarr = plt.subplots(2, 2)
-        axarr[0, 0].plot(simple_plot(model, index=0)[0]/10**9, simple_plot(model, index=0)[1], 'b')
-        axarr[0, 0].plot(simple_plot(model, index=0)[0]/10**9, simple_plot(model, index=0)[2], 'r')
+        axarr[0, 0].plot(simple_plot_script(model, index=0)[0]/10**9, simple_plot_script(model, index=0)[1], 'b')
+        axarr[0, 0].plot(simple_plot_script(model, index=0)[0]/10**9, simple_plot_script(model, index=0)[2], 'r')
         axarr[0, 0].get_yaxis().set_major_formatter(FuncFormatter(format))
         axarr[0, 0].set_title('S11')
 
-        axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, simple_plot(model, index=1)[1], 'b')
-        axarr[0, 1].plot(simple_plot(model, index=1)[0]/10**9, simple_plot(model, index=1)[2], 'r')
+        axarr[0, 1].plot(simple_plot_script(model, index=1)[0]/10**9, simple_plot_script(model, index=1)[1], 'b')
+        axarr[0, 1].plot(simple_plot_script(model, index=1)[0]/10**9, simple_plot_script(model, index=1)[2], 'r')
         axarr[0, 1].get_yaxis().set_major_formatter(FuncFormatter(format2))
         axarr[0, 1].set_title('S12')
 
-        axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, simple_plot(model, index=2)[1], 'b')
-        axarr[1, 0].plot(simple_plot(model, index=2)[0]/10**9, simple_plot(model, index=2)[2], 'r')
+        axarr[1, 0].plot(simple_plot_script(model, index=2)[0]/10**9, simple_plot_script(model, index=2)[1], 'b')
+        axarr[1, 0].plot(simple_plot_script(model, index=2)[0]/10**9, simple_plot_script(model, index=2)[2], 'r')
         axarr[1, 0].get_yaxis().set_major_formatter(FuncFormatter(format2))
         axarr[1, 0].set_title('S21')
 
-        axarr[1, 1].plot(simple_plot(model, index=3)[0]/10**9, simple_plot(model, index=3)[1], 'b')
-        axarr[1, 1].plot(simple_plot(model, index=3)[0]/10**9, simple_plot(model, index=3)[2], 'r')
+        axarr[1, 1].plot(simple_plot_script(model, index=3)[0]/10**9, simple_plot_script(model, index=3)[1], 'b')
+        axarr[1, 1].plot(simple_plot_script(model, index=3)[0]/10**9, simple_plot_script(model, index=3)[2], 'r')
         axarr[1, 1].get_yaxis().set_major_formatter(FuncFormatter(format))
         axarr[1, 1].set_title('S22')
 
@@ -752,12 +749,12 @@ def plot(model, **options):
         fig.subplots_adjust(top=0.86)
 
     else:
-        plt.plot(simple_plot(model, **options)[0]/10**9, simple_plot(model, **options)[1], 'b')
-        plt.plot(simple_plot(model, **options)[0]/10**9, simple_plot(model, **options)[2], 'r')
+        plt.plot(simple_plot_script(model, **options)[0]/10**9, simple_plot_script(model, **options)[1], 'b')
+        plt.plot(simple_plot_script(model, **options)[0]/10**9, simple_plot_script(model, **options)[2], 'r')
         plt.ylabel('Magnitude')
         plt.xlabel('Frequency [GHz]')
         if index == 0:
-            plt.title(str(type(model)).__name__) + " S11 vs. Frequency"
+            plt.title(str(type(model).__name__) + " S11 vs. Frequency")
         elif index == 1:
             plt.title(str(type(model).__name__) + " S12 vs. Frequency")
         elif index == 2:
@@ -767,10 +764,10 @@ def plot(model, **options):
     plt.show()
 
 
-def simple_plot(model, **options):
+def simple_plot_script(model, **options):
     """ This plots and fits simple versions of short/open/load s parameters
         assumes characteristic impedance is known/not changing - this can be changed
-        <br/> <b> Ex: simple_plot(OpenModel(), noise=0.004, index=0) </b>
+        <br/> **Ex: simple_plot_script(OpenModel(), noise=0.004, index=0)**
         <h3> Default Vals: </h3>
             <ul>
                 <li> noise = noise added to s param data, 5E-6 </li>
@@ -804,7 +801,7 @@ def simple_plot(model, **options):
     if plot_options['s']:
         sim_s = plot_options['s']
     else:
-        sim_s = model.s_params()[index] + noise*np.random.randn(len(model.f))
+        sim_s = model.s_parameters()[index] + noise*np.random.randn(len(model.f))
 
     p = lmfit.Parameters()
 
@@ -863,19 +860,19 @@ def simple_plot(model, **options):
 # Module Runner
 
 # test_model_calc()
-# plot(OpenModel())
+# plot_s_parameters_script(OpenModel())
 
 # Test Plot
-# plot_params(ShortModel(complex=True), format="RI")
-plot(ShortModel())
+# plot_parameters_script(ShortModel(complex=True), format="RI")
+plot_s_parameters_script(ShortModel(), index=0)
 
-# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[0:2], use_unicode=False)
-# sympy.pprint(separate_imag(ShortModel(complex=True).equation_list[1], 'short')[2:], use_unicode=False)
+# sympy.pprint(separate_imaginary(ShortModel(complex=True).equation_list[1], 'short')[0:2], use_unicode=False)
+# sympy.pprint(separate_imaginary(ShortModel(complex=True).equation_list[1], 'short')[2:], use_unicode=False)
 # quit()
 
 # m = ShortModel(complex=True)
 # l0, l1, l2 = sympy.symbols('l0 l1 l2')
 # L = sympy.symbols('L', real=True)
-# s11_eqn = separate_imag(m.equation_list[0], 'short')[1] + separate_imag(m.equation_list[0], 'short')[3]
+# s11_eqn = separate_imaginary(m.equation_list[0], 'short')[1] + separate_imaginary(m.equation_list[0], 'short')[3]
 # print s11_eqn
 # s21_eqn = sympy.sqrt(1 - s11_eqn**2)

@@ -114,11 +114,11 @@ class TwoPortModel(object):
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
             self.equation_list[i] = self.equation_list[i].subs(s, self.equation_list[0])
 
-    def set_freq(self, freq):
+    def set_frequency(self, freq):
         """ Sets the frequency of the model. """
         self.f = freq
 
-    def get_eqns(self):
+    def get_equations(self):
         """ Uses sympy.pprint to display the equations in a nice format for the console.
             Constraint - self.equation_list MUST BE sympy matrix or other sympy format. """
         sympy.init_printing()
@@ -141,7 +141,7 @@ class TwoPortModel(object):
                 a[j].append(float("{0:.8f}".format(p)))
         return a
 
-    def s_params(self):
+    def s_parameters(self):
         """ Formats S params to be [S11], [S12], [S21], [S11] - helpful for fitting. """
         s11 = []; s12 = []; s21 = []; s22 = []
         for list1 in self.data():
@@ -225,7 +225,7 @@ class OpenModel(TwoPortModel):
             self.equation_list[i] = self.equation_list[i].subs(zeta, z_c)
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
-    def set_complex_coefs(self, c0, c1, c2):
+    def set_complex_coefficients(self, c0, c1, c2):
         """ Sets complex coefficients (c0, c1, c2) and recalculates impedance. """
         self.c0 = c0
         self.c1 = c1
@@ -247,9 +247,9 @@ class OpenModel(TwoPortModel):
             complex_options[key] = value
         if self.complex:
             if complex_options['c0'] and complex_options['c1'] and complex_options['c2']:
-                self.set_complex_coefs(complex_options['c0'], complex_options['c1'], complex_options['c2'])
+                self.set_complex_coefficients(complex_options['c0'], complex_options['c1'], complex_options['c2'])
             else:
-                self.set_complex_coefs(1E-12, 1E-12, 1E-12)
+                self.set_complex_coefficients(1E-12, 1E-12, 1E-12)
         else:
             if complex_options['c']:
                 self.set_c(complex_options['c'])
@@ -359,7 +359,7 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
             self.equation_list[i] = self.equation_list[i].subs(zeta, z_l).simplify()
             self.equation_list[i] = self.equation_list[i].subs(Z, self.z0)
 
-    def set_complex_coefs(self, l0, l1, l2):
+    def set_complex_coefficients(self, l0, l1, l2):
         """ Sets complex coefficients (l0, l1, l2) and recalculates impedance. """
         self.l0 = l0
         self.l1 = l1
@@ -381,9 +381,9 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
             complex_options[key] = value
         if self.complex:
             if complex_options['l0'] and complex_options['l1'] and complex_options['l2']:
-                self.set_complex_coefs(complex_options['l0'], complex_options['l1'], complex_options['l2'])
+                self.set_complex_coefficients(complex_options['l0'], complex_options['l1'], complex_options['l2'])
             else:
-                self.set_complex_coefs(1E-12, 1E-12, 1E-12)
+                self.set_complex_coefficients(1E-12, 1E-12, 1E-12)
         else:
             if complex_options['l']:
                 self.set_l(complex_options['l'])
@@ -412,14 +412,13 @@ class ShortModel(TwoPortModel, lmfit.model.Model):
                     a[j].append(p)
             return a
 
-    # New Guess
     # z0_min = f.max() / (f.max() - f.min())
     # z0_max = f.max() / min_delta_f
     def guess(self, data, f=None, **options):
         verbose = options.pop('verbose', None)
         if f is None:
             return
-        argmin_s11 = np.abs(data).argmin()
+        argmin_s11 = data.argmin()
         f0_guess = f[argmin_s11]
         delta_f = np.diff(f)
         min_delta_f = delta_f[delta_f > 0].min()
@@ -450,7 +449,7 @@ def calc_phase(a):
     return p
 
 
-def calc_mag(a):
+def calc_magnitude(a):
     """ Calculates the magnitude/real component for an array. """
     m = []
     [m.append(sympy.Abs(i)) for i in a]
@@ -474,7 +473,7 @@ def test_complex_fit(data, result):
     return ["real error: ", np.average(r_error), "imag error: ", np.average(i_error)]
 
 
-def separate_imag(eqn, model_type):
+def separate_imaginary(eqn, model_type):
     """ Separates the real and imaginary components of symbolic equations. """
     # TODO - this doesn't really work for S12/S21
     from sympy import symbols, expand, simplify, conjugate, denom, I
@@ -490,10 +489,10 @@ def separate_imag(eqn, model_type):
                      'imag', simplify(expand(eqn) - eqn.subs(sympy.I, 0)).subs(I, 1)])
 
 
-def plot(model, **options):
+def plot_s_parameters_script(model, **options):
     """ Will plot any model using helper methods (in theory), can use keyword args to specify noise, data, or number of
         graphs. Currently works for non-complex open and short models.
-        <br/> <b>Ex: plot(OpenModel(), noise=9E-4)</b>
+        <br/> <b>Ex: plot_s_parameters_script(OpenModel(), noise=9E-4)</b>
         <br/> <h3> Default Vals: </h3>
         <ul>
             <li> noise = 1E-5 </li>
@@ -514,33 +513,33 @@ def plot(model, **options):
 
     if all_plots:
         g, axarr = plt.subplots(2, 2)
-        axarr[0, 0].plot(simple_plot(model, index=0)[0], simple_plot(model, index=0)[1])
-        axarr[0, 0].plot(simple_plot(model, index=0)[0], simple_plot(model, index=0)[2])
+        axarr[0, 0].plot(simple_plot_script(model, index=0)[0], simple_plot_script(model, index=0)[1])
+        axarr[0, 0].plot(simple_plot_script(model, index=0)[0], simple_plot_script(model, index=0)[2])
         axarr[0, 0].set_title('S11')
 
-        axarr[0, 1].plot(simple_plot(model, index=1)[0], simple_plot(model, index=1)[1])
-        axarr[0, 1].plot(simple_plot(model, index=1)[0], simple_plot(model, index=1)[2])
+        axarr[0, 1].plot(simple_plot_script(model, index=1)[0], simple_plot_script(model, index=1)[1])
+        axarr[0, 1].plot(simple_plot_script(model, index=1)[0], simple_plot_script(model, index=1)[2])
         axarr[0, 1].set_ylim([-1E-6, 1E-5])if type(model) == ShortModel else None
         axarr[0, 1].set_title('S12')
 
-        axarr[1, 0].plot(simple_plot(model, index=2)[0], simple_plot(model, index=2)[1])
-        axarr[1, 0].plot(simple_plot(model, index=2)[0], simple_plot(model, index=2)[2])
+        axarr[1, 0].plot(simple_plot_script(model, index=2)[0], simple_plot_script(model, index=2)[1])
+        axarr[1, 0].plot(simple_plot_script(model, index=2)[0], simple_plot_script(model, index=2)[2])
         axarr[1, 0].set_ylim([-1E-6, 1E-5])if type(model) == ShortModel else None
         axarr[1, 0].set_title('S21')
 
-        axarr[1, 1].plot(simple_plot(model, index=3)[0], simple_plot(model, index=3)[1])
-        axarr[1, 1].plot(simple_plot(model, index=3)[0], simple_plot(model, index=3)[2])
+        axarr[1, 1].plot(simple_plot_script(model, index=3)[0], simple_plot_script(model, index=3)[1])
+        axarr[1, 1].plot(simple_plot_script(model, index=3)[0], simple_plot_script(model, index=3)[2])
         axarr[1, 1].set_title('S22')
 
     else:
-        plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[1], 'b')
-        plt.plot(simple_plot(model, **options)[0], simple_plot(model, **options)[2], 'r')
+        plt.plot(simple_plot_script(model, **options)[0], simple_plot_script(model, **options)[1], 'b')
+        plt.plot(simple_plot_script(model, **options)[0], simple_plot_script(model, **options)[2], 'r')
 
     plt.tight_layout()
     plt.show()
 
 
-def simple_plot(model, **options):
+def simple_plot_script(model, **options):
     """ This plots and fits simple versions of short/open/load s parameters
         noise is the noise added to s param data,
         index is the s parameter that the user wants (0-3), otherwise method plots all
@@ -568,7 +567,7 @@ def simple_plot(model, **options):
     if plot_options['s']:
         sim_s = plot_options['s']
     else:
-        sim_s = model.s_params()[index] + noise*np.random.randn(len(model.f))
+        sim_s = model.s_parameters()[index] + noise*np.random.randn(len(model.f))
 
     p = lmfit.Parameters()
 
@@ -654,7 +653,7 @@ def plot_complex(frequency, fit_val, actual_val, measured_val):
 short = ShortModel(complex=True)
 true_params = short.make_params(z0=short.z0, l0_real=short.l0, l0_imag=short.l0, l1_real=short.l1, l1_imag=short.l1,
                                 l2_real=short.l2, l2_imag=short.l2, f=short.f[0])
-freq = np.linspace(10E9, 50E9, 800)
+freq = np.linspace(10E9, 50E9, 500)
 noise_scale = 1E-11
 true_s11 = short.eval(params=true_params, f=freq)
 
@@ -668,8 +667,12 @@ result = short.fit(measured_s11, params=guess, f=freq, method='cd')
 # btw real vals - http://na.support.keysight.com/pna/caldefs/stddefs.html
 
 fit_s11 = short.eval(params=result.params, f=freq)
+# for i in range(len(fit_s11)):
+#     print("Real: ", fit_s11[i].real, true_s11[i].real)
+#     print("Imag: ", fit_s11[i].imag, true_s11[i].imag)
+# quit()
 plot_complex(freq, fit_s11, true_s11, measured_s11)
-plot_ri(freq, fit_s11, true_s11)
+# plot_ri(freq, fit_s11, true_s11)
 
 
 
